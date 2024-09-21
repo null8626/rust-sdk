@@ -212,20 +212,14 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       shards: &[usize] => {
-        match self.shards {
-          Some(ref shards) => shards,
-          None => &[],
-        }
+        self.shards.as_deref().unwrap_or_default()
       }
 
       /// The amount of shards this Discord bot has.
       #[must_use]
       #[inline(always)]
       shard_count: usize => {
-        self.shard_count.unwrap_or(match self.shards {
-          Some(ref shards) => shards.len(),
-          None => 0,
-        })
+        self.shard_count.unwrap_or(self.shards().len())
       }
 
       /// The amount of servers this bot is in. `None` if such information is publy unavailable.
@@ -236,7 +230,7 @@ util::debug_struct! {
             if shards.is_empty() {
               None
             } else {
-              Some(shards.iter().copied().sum())
+              Some(shards.into_iter().copied().sum())
             }
           })
         })

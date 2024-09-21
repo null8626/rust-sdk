@@ -83,7 +83,7 @@ pub(crate) fn deserialize_optional_string<'de, D>(
 where
   D: Deserializer<'de>,
 {
-  Ok(match <String as Deserialize>::deserialize(deserializer) {
+  Ok(match String::deserialize(deserializer) {
     Ok(s) => {
       if s.is_empty() {
         None
