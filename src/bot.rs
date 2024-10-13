@@ -124,7 +124,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id)
+        util::get_avatar(&self.avatar, self.id, Some(&self.discriminator))
       }
 
       /// The invite URL of this Discord bot.
@@ -222,7 +222,7 @@ util::debug_struct! {
         self.shard_count.unwrap_or(self.shards().len())
       }
 
-      /// The amount of servers this bot is in. `None` if such information is publy unavailable.
+      /// The amount of servers this bot is in. `None` if such information is publicly unavailable.
       #[must_use]
       server_count: Option<usize> => {
         self.server_count.or_else(|| {
@@ -230,7 +230,7 @@ util::debug_struct! {
             if shards.is_empty() {
               None
             } else {
-              Some(shards.into_iter().copied().sum())
+              Some(shards.iter().copied().sum())
             }
           })
         })

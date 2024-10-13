@@ -185,17 +185,20 @@ where
   pub fn handler(&self) -> Arc<H> {
     Arc::clone(&self.handler)
   }
-  
+
   /// Returns a future that resolves every time the [`Autoposter`] has attempted to post the bot's stats. If you want to use the receiver directly, call [`receiver`].
   #[inline(always)]
   pub async fn recv(&mut self) -> Option<Result<()>> {
     self.receiver.as_mut().expect("receiver is already taken from the receiver() method. please call recv() directly from the receiver.").recv().await
   }
-  
+
   /// Takes the receiver responsible for [`recv`]. Subsequent calls to this function and [`recv`] after this call will panic.
   #[inline(always)]
   pub fn receiver(&mut self) -> mpsc::UnboundedReceiver<Result<()>> {
-    self.receiver.take().expect("receiver() can only be called once.")
+    self
+      .receiver
+      .take()
+      .expect("receiver() can only be called once.")
   }
 }
 

@@ -91,7 +91,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id)
+        util::get_avatar(&self.avatar, self.id, None)
       }
     }
   }
@@ -134,7 +134,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id)
+        util::get_avatar(&self.avatar, self.id, None)
       }
     }
   }

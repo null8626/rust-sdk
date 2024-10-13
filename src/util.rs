@@ -126,7 +126,7 @@ where
   Err(Error::InternalServerError)
 }
 
-pub(crate) fn get_avatar(hash: &Option<String>, id: u64) -> String {
+pub(crate) fn get_avatar(hash: &Option<String>, id: u64, discriminator: Option<&str>) -> String {
   match hash {
     Some(hash) => {
       let ext = if hash.starts_with("a_") { "gif" } else { "png" };
@@ -135,7 +135,10 @@ pub(crate) fn get_avatar(hash: &Option<String>, id: u64) -> String {
     }
     _ => format!(
       "https://cdn.discordapp.com/embed/avatars/{}.png",
-      (id >> 22) % 5
+      match discriminator.and_then(|d| d.parse::<u64>().ok()) {
+        Some(d) => d % 5,
+        None => (id >> 22) % 6,
+      }
     ),
   }
 }
