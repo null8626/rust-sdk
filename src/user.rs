@@ -103,7 +103,7 @@ pub(crate) struct Voted {
 }
 
 util::debug_struct! {
-  /// A struct representing a user who has voted on a Discord bot listed on [Top.gg](https://top.gg). (See [`Client::get_voters`][crate::Client::get_voters])
+  /// A struct representing a user who has voted on a bot listed on [Top.gg](https://top.gg). (See [`Client::get_voters`][crate::Client::get_voters])
   #[must_use]
   #[derive(Clone, Deserialize)]
   Voter {

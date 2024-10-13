@@ -14,29 +14,29 @@ where
 }
 
 util::debug_struct! {
-  /// A struct representing a Discord Bot listed on [Top.gg](https://top.gg).
+  /// A struct representing a bot listed on [Top.gg](https://top.gg).
   #[must_use]
   #[derive(Clone, Deserialize)]
   Bot {
     public {
-      /// The ID of this Discord bot.
+      /// The ID of this bot.
       #[serde(deserialize_with = "snowflake::deserialize")]
       id: u64,
 
-      /// The username of this Discord bot.
+      /// The username of this bot.
       username: String,
 
-      /// The discriminator of this Discord bot.
+      /// The discriminator of this bot.
       discriminator: String,
 
-      /// The prefix of this Discord bot.
+      /// The prefix of this bot.
       prefix: String,
 
-      /// The short description of this Discord bot.
+      /// The short description of this bot.
       #[serde(rename = "shortdesc")]
       short_description: String,
 
-      /// The long description of this Discord bot. It can contain HTML and/or Markdown.
+      /// The long description of this bot. It can contain HTML and/or Markdown.
       #[serde(
         default,
         deserialize_with = "util::deserialize_optional_string",
@@ -44,27 +44,27 @@ util::debug_struct! {
       )]
       long_description: Option<String>,
 
-      /// The tags of this Discord bot.
+      /// The tags of this bot.
       #[serde(default, deserialize_with = "util::deserialize_default")]
       tags: Vec<String>,
 
-      /// The website URL of this Discord bot.
+      /// The website URL of this bot.
       #[serde(default, deserialize_with = "util::deserialize_optional_string")]
       website: Option<String>,
 
-      /// The link to this Discord bot's GitHub repository.
+      /// The link to this bot's GitHub repository.
       #[serde(default, deserialize_with = "util::deserialize_optional_string")]
       github: Option<String>,
 
-      /// A list of IDs of this Discord bot's owners. The main owner is the first ID in the array.
+      /// A list of IDs of this bot's owners. The main owner is the first ID in the array.
       #[serde(deserialize_with = "snowflake::deserialize_vec")]
       owners: Vec<u64>,
 
-      /// A list of IDs of the guilds featured on this Discord bot's page.
+      /// A list of IDs of the guilds featured on this bot's page.
       #[serde(default, deserialize_with = "snowflake::deserialize_vec")]
       guilds: Vec<u64>,
 
-      /// The URL for this Discord bot's banner image.
+      /// The URL for this bot's banner image.
       #[serde(
         default,
         deserialize_with = "util::deserialize_optional_string",
@@ -72,27 +72,27 @@ util::debug_struct! {
       )]
       banner_url: Option<String>,
 
-      /// The date when this Discord bot was approved on [Top.gg](https://top.gg).
+      /// The date when this bot was approved on [Top.gg](https://top.gg).
       #[serde(rename = "date")]
       approved_at: DateTime<Utc>,
 
-      /// Whether this Discord bot is [Top.gg](https://top.gg) certified or not.
+      /// Whether this bot is [Top.gg](https://top.gg) certified or not.
       #[serde(rename = "certifiedBot")]
       is_certified: bool,
 
-      /// A list of this Discord bot's shards.
+      /// A list of this bot's shards.
       #[serde(default, deserialize_with = "util::deserialize_default")]
       shards: Vec<usize>,
 
-      /// The amount of upvotes this Discord bot has.
+      /// The amount of upvotes this bot has.
       #[serde(rename = "points")]
       votes: usize,
 
-      /// The amount of upvotes this Discord bot has this month.
+      /// The amount of upvotes this bot has this month.
       #[serde(rename = "monthlyPoints")]
       monthly_votes: usize,
 
-      /// The support server invite URL of this Discord bot.
+      /// The support server invite URL of this bot.
       #[serde(default, deserialize_with = "deserialize_support_server")]
       support: Option<String>,
     }
@@ -127,7 +127,7 @@ util::debug_struct! {
         util::get_avatar(&self.avatar, self.id, Some(&self.discriminator))
       }
 
-      /// The invite URL of this Discord bot.
+      /// The invite URL of this bot.
       #[must_use]
       invite: String => {
         match &self.invite {
@@ -139,14 +139,14 @@ util::debug_struct! {
         }
       }
 
-      /// The amount of shards this Discord bot has according to posted stats.
+      /// The amount of shards this bot has according to posted stats.
       #[must_use]
       #[inline(always)]
       shard_count: usize => {
         self.shard_count.unwrap_or(self.shards.len())
       }
 
-      /// Retrieves the URL of this Discord bot's [Top.gg](https://top.gg) page.
+      /// Retrieves the URL of this bot's [Top.gg](https://top.gg) page.
       #[must_use]
       #[inline(always)]
       url: String => {
@@ -160,7 +160,7 @@ util::debug_struct! {
 }
 
 util::debug_struct! {
-  /// A struct representing a Discord bot's statistics.
+  /// A struct representing a bot's statistics.
   ///
   /// # Examples
   ///
@@ -208,14 +208,14 @@ util::debug_struct! {
     }
 
     getters(self) {
-      /// An array of this Discord bot's server count for each shard.
+      /// An array of this bot's server count for each shard.
       #[must_use]
       #[inline(always)]
       shards: &[usize] => {
         self.shards.as_deref().unwrap_or_default()
       }
 
-      /// The amount of shards this Discord bot has.
+      /// The amount of shards this bot has.
       #[must_use]
       #[inline(always)]
       shard_count: usize => {

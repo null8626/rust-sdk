@@ -170,7 +170,7 @@ impl Client {
       .await
   }
 
-  /// Fetches a listed Discord bot from a Discord ID.
+  /// Fetches a listed bot from a Discord ID.
   ///
   /// # Panics
   ///
@@ -183,7 +183,7 @@ impl Client {
   /// Errors if any of the following conditions are met:
   /// - An internal error from the client itself preventing it from sending a HTTP request to [Top.gg](https://top.gg) ([`InternalClientError`][crate::Error::InternalClientError])
   /// - An unexpected response from the [Top.gg](https://top.gg) servers ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - The requested Discord bot is not listed on [Top.gg](https://top.gg) ([`NotFound`][crate::Error::NotFound])
+  /// - The requested bot is not listed on [Top.gg](https://top.gg) ([`NotFound`][crate::Error::NotFound])
   /// - The client is being ratelimited from sending more HTTP requests ([`Ratelimit`][crate::Error::Ratelimit])
   pub async fn get_bot<I>(&self, id: I) -> Result<Bot>
   where
@@ -195,7 +195,7 @@ impl Client {
       .await
   }
 
-  /// Fetches your Discord bot's statistics.
+  /// Fetches your bot's statistics.
   ///
   /// # Panics
   ///
@@ -214,7 +214,7 @@ impl Client {
       .await
   }
 
-  /// Posts your Discord bot's statistics.
+  /// Posts your bot's statistics.
   ///
   /// # Panics
   ///
@@ -231,7 +231,7 @@ impl Client {
     self.inner.post_stats(&new_stats).await
   }
 
-  /// Fetches your Discord bot's last 1000 voters.
+  /// Fetches your bot's last 1000 voters.
   ///
   /// # Panics
   ///
@@ -250,7 +250,7 @@ impl Client {
       .await
   }
 
-  /// Checks if the specified user has voted your Discord bot.
+  /// Checks if the specified user has voted your bot.
   ///
   /// # Panics
   ///

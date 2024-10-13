@@ -116,7 +116,7 @@ impl SharedStats {
   }
 }
 
-/// A trait for handling events from third-party Discord Bot libraries.
+/// A trait for handling events from third-party bot libraries.
 ///
 /// The struct implementing this trait should own an [`SharedStats`] struct and update it accordingly whenever Discord updates them with new data regarding guild/shard count.
 pub trait Handler: Send + Sync + 'static {
@@ -141,7 +141,7 @@ where
   /// Creates an [`Autoposter`] struct as well as immediately starting the thread. The thread will never stop until this struct gets dropped.
   ///
   /// - `client` can either be a reference to an existing [`Client`][crate::Client] or a [`&str`][std::str] representing a [Top.gg API](https://docs.top.gg) token.
-  /// - `handler` is a struct that handles the *retrieving stats* part before being sent to the [`Autoposter`]. This datatype is essentially the bridge between an external third-party Discord Bot library between this library.
+  /// - `handler` is a struct that handles the *retrieving stats* part before being sent to the [`Autoposter`]. This datatype is essentially the bridge between an external third-party bot library between this library.
   ///
   /// # Panics
   ///

@@ -144,7 +144,7 @@ serenity_handler! {
         self.handle_guild_create(
           #[cfg(not(feature = "serenity-cached"))] guild.id,
           #[cfg(feature = "serenity-cached")] context.cache.guilds().len(),
-          #[cfg(feature = "serenity-cached")] is_new.expect("serenity-cached feature is enabled but the discord bot doesn't cache guilds"),
+          #[cfg(feature = "serenity-cached")] is_new.expect("serenity-cached feature is enabled but the bot doesn't cache guilds"),
         ).await
       }
 
