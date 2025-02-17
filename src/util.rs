@@ -3,6 +3,17 @@ use chrono::{DateTime, TimeZone, Utc};
 use reqwest::Response;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
+// TODO: remove these utility deprecation helpers soon
+
+#[inline(always)]
+pub(crate) fn deserialize_immediate_default<'de, D, T>(_deserializer: D) -> Result<T, D::Error>
+where
+  D: Deserializer<'de>,
+  T: Default,
+{
+  Ok(T::default())
+}
+
 const DISCORD_EPOCH: u64 = 1_420_070_400_000;
 
 macro_rules! debug_struct {
@@ -126,7 +137,7 @@ where
   Err(Error::InternalServerError)
 }
 
-pub(crate) fn get_avatar(hash: &Option<String>, id: u64, discriminator: Option<&str>) -> String {
+pub(crate) fn get_avatar(hash: &Option<String>, id: u64) -> String {
   match hash {
     Some(hash) => {
       let ext = if hash.starts_with("a_") { "gif" } else { "png" };
@@ -135,10 +146,7 @@ pub(crate) fn get_avatar(hash: &Option<String>, id: u64, discriminator: Option<&
     }
     _ => format!(
       "https://cdn.discordapp.com/embed/avatars/{}.png",
-      match discriminator.and_then(|d| d.parse::<u64>().ok()) {
-        Some(d) => d % 5,
-        None => (id >> 22) % 6,
-      }
+      (id >> 22) % 6,
     ),
   }
 }

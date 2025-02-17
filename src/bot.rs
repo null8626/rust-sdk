@@ -13,6 +13,16 @@ where
     .map(|inner| inner.map(|support| format!("https://discord.com/invite/{support}")))
 }
 
+// TODO: remove these utility deprecation helpers soon
+
+#[inline(always)]
+fn deserialize_discriminator<'de, D>(_deserializer: D) -> Result<String, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  Ok(String::from('0'))
+}
+
 util::debug_struct! {
   /// A struct representing a bot listed on [Top.gg](https://top.gg).
   #[must_use]
@@ -26,7 +36,8 @@ util::debug_struct! {
       /// The username of this bot.
       username: String,
 
-      /// The discriminator of this bot.
+      #[serde(deserialize_with = "deserialize_discriminator")]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be '0'.")]
       discriminator: String,
 
       /// The prefix of this bot.
@@ -60,8 +71,8 @@ util::debug_struct! {
       #[serde(deserialize_with = "snowflake::deserialize_vec")]
       owners: Vec<u64>,
 
-      /// A list of IDs of the guilds featured on this bot's page.
-      #[serde(default, deserialize_with = "snowflake::deserialize_vec")]
+      #[serde(deserialize_with = "util::deserialize_immediate_default")]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be an empty vector.")]
       guilds: Vec<u64>,
 
       /// The URL for this bot's banner image.
@@ -76,12 +87,12 @@ util::debug_struct! {
       #[serde(rename = "date")]
       approved_at: DateTime<Utc>,
 
-      /// Whether this bot is [Top.gg](https://top.gg) certified or not.
-      #[serde(rename = "certifiedBot")]
+      #[serde(deserialize_with = "util::deserialize_immediate_default")]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be false.")]
       is_certified: bool,
 
-      /// A list of this bot's shards.
-      #[serde(default, deserialize_with = "util::deserialize_default")]
+      #[serde(deserialize_with = "util::deserialize_immediate_default")]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be an empty vector.")]
       shards: Vec<usize>,
 
       /// The amount of upvotes this bot has.
@@ -104,8 +115,6 @@ util::debug_struct! {
       #[serde(default, deserialize_with = "util::deserialize_optional_string")]
       invite: Option<String>,
 
-      shard_count: Option<usize>,
-
       #[serde(default, deserialize_with = "util::deserialize_optional_string")]
       vanity: Option<String>,
     }
@@ -124,7 +133,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id, Some(&self.discriminator))
+        util::get_avatar(&self.avatar, self.id)
       }
 
       /// The invite URL of this bot.
@@ -139,11 +148,9 @@ util::debug_struct! {
         }
       }
 
-      /// The amount of shards this bot has according to posted stats.
-      #[must_use]
-      #[inline(always)]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return 0.")]
       shard_count: usize => {
-        self.shard_count.unwrap_or(self.shards.len())
+        0
       }
 
       /// Retrieves the URL of this bot's [Top.gg](https://top.gg) page.
@@ -160,80 +167,27 @@ util::debug_struct! {
 }
 
 util::debug_struct! {
-  /// A struct representing a bot's statistics.
-  ///
-  /// # Examples
-  ///
-  /// Solely from a server count:
-  ///
-  /// ```rust,no_run
-  /// use topgg::Stats;
-  ///
-  /// let _stats = Stats::from(12345);
-  /// ```
-  ///
-  /// Server count with a shard count:
-  ///
-  /// ```rust,no_run
-  /// use topgg::Stats;
-  ///
-  /// let server_count = 12345;
-  /// let shard_count = 10;
-  /// let _stats = Stats::from_count(server_count, Some(shard_count));
-  /// ```
-  ///
-  /// Solely from shards information:
-  ///
-  /// ```rust,no_run
-  /// use topgg::Stats;
-  ///
-  /// // the shard posting this data has 456 servers.
-  /// let _stats = Stats::from_shards([123, 456, 789], Some(1));
-  /// ```
-  #[must_use]
   #[derive(Clone, Serialize, Deserialize)]
+  #[deprecated(since = "1.4.3", note = "No longer has a use by Top.gg API v0. Soon, all you need is just your bot's server count (usize).")]
   Stats {
     protected {
-      #[serde(skip_serializing_if = "Option::is_none")]
-      shard_count: Option<usize>,
       #[serde(skip_serializing_if = "Option::is_none")]
       server_count: Option<usize>,
     }
 
-    private {
-      #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "util::deserialize_default")]
-      shards: Option<Vec<usize>>,
-      #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "util::deserialize_default")]
-      shard_id: Option<usize>,
-    }
-
     getters(self) {
-      /// An array of this bot's server count for each shard.
-      #[must_use]
-      #[inline(always)]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return an empty slice.")]
       shards: &[usize] => {
-        self.shards.as_deref().unwrap_or_default()
+        &[]
       }
 
-      /// The amount of shards this bot has.
-      #[must_use]
-      #[inline(always)]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return 0.")]
       shard_count: usize => {
-        self.shard_count.unwrap_or(self.shards().len())
+        0
       }
 
-      /// The amount of servers this bot is in. `None` if such information is publicly unavailable.
-      #[must_use]
       server_count: Option<usize> => {
-        self.server_count.or_else(|| {
-          self.shards.as_ref().and_then(|shards| {
-            if shards.is_empty() {
-              None
-            } else {
-              Some(shards.iter().copied().sum())
-            }
-          })
-        })
+        self.server_count
       }
     }
   }
@@ -251,59 +205,37 @@ impl Stats {
     )
   }
 
-  /// Creates a [`Stats`] struct based on total server and optionally, shard count data.
-  pub const fn from_count(server_count: usize, shard_count: Option<usize>) -> Self {
+  #[deprecated(
+    since = "1.4.3",
+    note = "The shard_count argument no longer has an effect."
+  )]
+  pub const fn from_count(server_count: usize, _shard_count: Option<usize>) -> Self {
     Self {
       server_count: Some(server_count),
-      shard_count,
-      shards: None,
-      shard_id: None,
     }
   }
 
-  /// Creates a [`Stats`] struct based on an array of server count per shard and optionally the index (to the array) of shard posting this data.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the shard_index argument is [`Some`] yet it's out of range of the `shards` array.
-  ///
-  /// # Examples
-  ///
-  /// Basic usage:
-  ///
-  /// ```rust,no_run
-  /// use topgg::Stats;
-  ///
-  /// // the shard posting this data has 456 servers.
-  /// let _stats = Stats::from_shards([123, 456, 789], Some(1));
-  /// ```
-  pub fn from_shards<A>(shards: A, shard_index: Option<usize>) -> Self
+  #[deprecated(
+    since = "1.4.3",
+    note = "No longer supported by Top.gg API v0. At the moment, the shard_index argument has no effect."
+  )]
+  pub fn from_shards<A>(shards: A, _shard_index: Option<usize>) -> Self
   where
     A: IntoIterator<Item = usize>,
   {
     let mut total_server_count = 0;
     let shards = shards.into_iter();
-    let mut shards_list = Vec::with_capacity(shards.size_hint().0);
 
     for server_count in shards {
       total_server_count += server_count;
-      shards_list.push(server_count);
-    }
-
-    if let Some(index) = shard_index {
-      assert!(index < shards_list.len(), "Shard index out of range.");
     }
 
     Self {
       server_count: Some(total_server_count),
-      shard_count: Some(shards_list.len()),
-      shards: Some(shards_list),
-      shard_id: shard_index,
     }
   }
 }
 
-/// Creates a [`Stats`] struct solely from a server count.
 impl From<usize> for Stats {
   #[inline(always)]
   fn from(server_count: usize) -> Self {

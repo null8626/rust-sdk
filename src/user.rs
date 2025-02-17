@@ -55,8 +55,8 @@ util::debug_struct! {
       #[serde(rename = "supporter")]
       is_supporter: bool,
 
-      /// Whether this user is a [Top.gg](https://top.gg) certified developer or not.
-      #[serde(rename = "certifiedDev")]
+      #[serde(deserialize_with = "util::deserialize_immediate_default")]
+      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be false.")]
       is_certified_dev: bool,
 
       /// Whether this user is a [Top.gg](https://top.gg) moderator or not.
@@ -91,7 +91,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id, None)
+        util::get_avatar(&self.avatar, self.id)
       }
     }
   }
@@ -134,7 +134,7 @@ util::debug_struct! {
       #[must_use]
       #[inline(always)]
       avatar: String => {
-        util::get_avatar(&self.avatar, self.id, None)
+        util::get_avatar(&self.avatar, self.id)
       }
     }
   }

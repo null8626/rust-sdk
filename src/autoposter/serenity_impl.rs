@@ -125,20 +125,6 @@ serenity_handler! {
       }
     }
 
-    #[cfg(feature = "serenity-cached")]
-    shards_ready {
-      map(total_shards: u32) {
-        // turns either &u32 or u32 to a u32 :)
-        self.handle_shards_ready(total_shards.add(0)).await
-      }
-
-      handle(shard_count: u32) {
-        let mut stats = self.stats.write().await;
-
-        stats.set_shard_count(shard_count as _);
-      }
-    }
-
     guild_create {
       map(guild: Guild, is_new: Option<bool>) {
         self.handle_guild_create(

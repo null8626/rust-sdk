@@ -59,11 +59,11 @@ impl SharedStatsGuard<'_> {
     self.guard.server_count = Some(server_count);
   }
 
-  /// Sets the current [`Stats`] shard count.
-  #[inline(always)]
-  pub fn set_shard_count(&mut self, shard_count: usize) {
-    self.guard.shard_count = Some(shard_count);
-  }
+  #[deprecated(
+    since = "1.4.3",
+    note = "No longer supported by Top.gg API v0. At the moment, this method has no effect."
+  )]
+  pub fn set_shard_count(&mut self, _shard_count: usize) {}
 }
 
 impl Deref for SharedStatsGuard<'_> {
