@@ -264,6 +264,7 @@ pub struct GetBots<'a> {
   client: &'a Client,
   query: String,
   search: String,
+  sort: Option<&'static str>,
 }
 
 macro_rules! get_bots_method {
@@ -279,6 +280,19 @@ macro_rules! get_bots_method {
   )*};
 }
 
+macro_rules! get_bots_sort {
+  ($(
+    $(#[doc = $doc:literal])*
+    $func_name:ident: $api_name:ident,
+  )*) => {$(
+    $(#[doc = $doc])*
+    pub fn $func_name(mut self) -> Self {
+      self.sort.replace(stringify!($api_name));
+      self
+    }
+  )*};
+}
+
 impl<'a> GetBots<'a> {
   #[inline(always)]
   pub(crate) fn new(client: &'a Client) -> Self {
@@ -286,7 +300,16 @@ impl<'a> GetBots<'a> {
       client,
       query: String::from('?'),
       search: String::new(),
+      sort: None,
     }
+  }
+
+  get_bots_sort! {
+    /// Sorts results based on each bot's approval date.
+    sort_by_approval_date: date,
+
+    /// Sorts results based on each bot's monthly vote count.
+    sort_by_monthly_votes: monthlyPoints,
   }
 
   get_bots_method! {
@@ -319,6 +342,10 @@ impl<'a> IntoFuture for GetBots<'a> {
 
   fn into_future(self) -> Self::IntoFuture {
     let mut query = self.query;
+
+    if let Some(sort) = self.sort {
+      query.push_str(&format!("sort={sort}&"));
+    }
 
     if !self.search.is_empty() {
       query.push_str(&format!("search={}", self.search));

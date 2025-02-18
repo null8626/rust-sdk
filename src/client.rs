@@ -285,6 +285,7 @@ impl Client {
   ///   .limit(250)
   ///   .skip(50)
   ///   .username("shiro")
+  ///   .sort_by_monthly_votes()
   ///   .await;
   ///
   /// for bot in bots {
