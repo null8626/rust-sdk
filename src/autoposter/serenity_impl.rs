@@ -106,7 +106,7 @@ serenity_handler! {
           if #[cfg(not(feature = "serenity-cached"))] {
             let mut cache = self.cache.lock().await;
 
-            cache.guilds = guilds.into_iter().map(|x| x.id).collect();
+            cache.guilds = guilds.iter().map(|x| x.id).collect();
           }
         }
       }
