@@ -62,7 +62,6 @@ async fn main() {
   let bot = client.get_bot(264811613708746752).await.unwrap();
   
   assert_eq!(bot.username, "Luca");
-  assert_eq!(bot.discriminator, "1375");
   assert_eq!(bot.id, 264811613708746752);
   
   println!("{:?}", bot);
@@ -103,7 +102,7 @@ async fn main() {
 
   let server_count = 12345;
   client
-    .post_stats(Stats::from(server_count))
+    .post_server_count(server_count)
     .await
     .unwrap();
 }

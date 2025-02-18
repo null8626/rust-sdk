@@ -32,9 +32,9 @@ cfg_if::cfg_if! {
 
 /// A trait for handling events from third-party bot libraries.
 ///
-/// The struct implementing this trait should own an [`SharedStats`] struct and update it accordingly whenever Discord updates them with new data regarding guild/shard count.
+/// The struct implementing this trait ideally should own a `RwLock<usize>` struct and update it accordingly whenever Discord updates them with new data regarding guild/shard count.
 pub trait Handler: Send + Sync + 'static {
-  /// The method that borrows [`SharedStats`] to the [`Autoposter`].
+  /// The method that borrows `RwLock<usize>` to the [`Autoposter`].
   fn server_count(&self) -> &RwLock<usize>;
 }
 

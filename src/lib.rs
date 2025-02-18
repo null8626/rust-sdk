@@ -2,6 +2,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod snowflake;
+#[cfg(test)]
+mod test;
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "api")] {
