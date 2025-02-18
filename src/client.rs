@@ -218,7 +218,7 @@ impl Client {
       .map(|stats: Stats| stats.server_count)
   }
 
-  /// Posts your bot's statistics.
+  /// Posts your bot's server count.
   ///
   /// # Panics
   ///
