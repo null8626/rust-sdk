@@ -1,6 +1,11 @@
-use crate::{snowflake, util};
+use crate::{snowflake, util, Client};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::{
+  cmp::min,
+  future::{Future, IntoFuture},
+  pin::Pin,
+};
 
 #[inline(always)]
 pub(crate) fn deserialize_support_server<'de, D>(
@@ -166,6 +171,11 @@ util::debug_struct! {
   }
 }
 
+#[derive(Deserialize)]
+pub(crate) struct Bots {
+  pub(crate) results: Vec<Bot>,
+}
+
 util::debug_struct! {
   #[derive(Clone, Serialize, Deserialize)]
   #[deprecated(since = "1.4.3", note = "No longer has a use by Top.gg API v0. Soon, all you need is just your bot's server count (usize).")]
@@ -246,4 +256,76 @@ impl From<usize> for Stats {
 #[derive(Deserialize)]
 pub(crate) struct IsWeekend {
   pub(crate) is_weekend: bool,
+}
+
+// A struct for configuring the query in [`get_bots`][crate::Client::get_bots] before being sent to the [Top.gg API](https://docs.top.gg) by `await`ing it.
+#[must_use]
+pub struct GetBots<'a> {
+  client: &'a Client,
+  query: String,
+  search: String,
+}
+
+macro_rules! get_bots_method {
+  ($(
+    $(#[doc = $doc:literal])*
+    $input_name:ident: $input_type:ty = $property:ident($($format:tt)*);
+  )*) => {$(
+    $(#[doc = $doc])*
+    pub fn $input_name(mut self, $input_name: $input_type) -> Self {
+      self.$property.push_str(&format!($($format)*));
+      self
+    }
+  )*};
+}
+
+impl<'a> GetBots<'a> {
+  #[inline(always)]
+  pub(crate) fn new(client: &'a Client) -> Self {
+    Self {
+      client,
+      query: String::from('?'),
+      search: String::new(),
+    }
+  }
+
+  get_bots_method! {
+    /// Sets the maximum amount of bots to be queried.
+    limit: u16 = query("limit={}&", min(limit, 500));
+
+    /// Sets the amount of bots to be skipped during the query.
+    skip: u16 = query("offset={}&", min(skip, 499));
+
+    /// Queries only Discord bots that matches this username.
+    username: &str = search("username%3A%20{}%20", urlencoding::encode(username));
+
+    /// Queries only Discord bots that matches this prefix.
+    prefix: &str = search("prefix%3A%20{}%20", urlencoding::encode(prefix));
+
+    /// Queries only Discord bots that has this vote count.
+    votes: usize = search("points%3A%20{votes}%20");
+
+    /// Queries only Discord bots that has this monthly vote count.
+    monthly_votes: usize = search("monthlyPoints%3A%20{monthly_votes}%20");
+
+    /// Queries only Discord bots that has this [Top.gg](https://top.gg) vanity URL.
+    vanity: &str = search("vanity%3A%20{}%20", urlencoding::encode(vanity));
+  }
+}
+
+impl<'a> IntoFuture for GetBots<'a> {
+  type Output = crate::Result<Vec<Bot>>;
+  type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
+
+  fn into_future(self) -> Self::IntoFuture {
+    let mut query = self.query;
+
+    if !self.search.is_empty() {
+      query.push_str(&format!("search={}", self.search));
+    } else {
+      query.pop();
+    }
+
+    Box::pin(self.client.get_bots_inner(query))
+  }
 }

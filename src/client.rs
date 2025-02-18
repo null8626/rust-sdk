@@ -1,5 +1,5 @@
 use crate::{
-  bot::{Bot, IsWeekend},
+  bot::{Bot, Bots, GetBots, IsWeekend},
   user::{User, Voted, Voter},
   util, Error, Result, Snowflake, Stats,
 };
@@ -248,6 +248,52 @@ impl Client {
       .inner
       .send(Method::GET, api!("/bots/votes"), None)
       .await
+  }
+
+  pub(crate) async fn get_bots_inner(&self, query: String) -> Result<Vec<Bot>> {
+    self
+      .inner
+      .send::<Bots>(Method::GET, api!("/bots{}", query), None)
+      .await
+      .map(|res| res.results)
+  }
+
+  /// Queries/searches through the [Top.gg](https://top.gg) database to look for matching listed Discord bots.
+  ///
+  /// # Panics
+  ///
+  /// Panics if any of the client uses an invalid [Top.gg API](https://docs.top.gg) token (unauthorized).
+  ///
+  /// # Errors
+  ///
+  /// Errors if any of the following conditions are met:
+  /// - An internal error from the client itself preventing it from sending a HTTP request to [Top.gg](https://top.gg) ([`InternalClientError`][crate::Error::InternalClientError])
+  /// - An unexpected response from the [Top.gg](https://top.gg) servers ([`InternalServerError`][crate::Error::InternalServerError])
+  /// - The client is being ratelimited from sending more HTTP requests ([`Ratelimit`][crate::Error::Ratelimit])
+  ///
+  /// # Examples
+  ///
+  /// Basic usage:
+  ///
+  /// ```rust,no_run
+  /// use topgg::{Client, GetBots};
+  ///
+  /// let client = Client::new(env!("TOPGG_TOKEN").to_string());
+  ///
+  /// let bots = client
+  ///   .get_bots()
+  ///   .limit(250)
+  ///   .skip(50)
+  ///   .username("shiro")
+  ///   .await;
+  ///
+  /// for bot in bots {
+  ///   println!("{:?}", bot);
+  /// }
+  /// ```
+  #[inline(always)]
+  pub fn get_bots(&self) -> GetBots<'_> {
+    GetBots::new(self)
   }
 
   /// Checks if the specified user has voted your bot.
