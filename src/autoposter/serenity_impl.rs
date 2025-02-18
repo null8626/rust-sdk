@@ -1,4 +1,4 @@
-use crate::autoposter::{Handler, SharedStats};
+use crate::autoposter::Handler;
 use paste::paste;
 use serenity::{
   client::{Context, EventHandler, FullEvent},
@@ -8,6 +8,7 @@ use serenity::{
     id::GuildId,
   },
 };
+use tokio::sync::RwLock;
 
 cfg_if::cfg_if! {
   if #[cfg(not(feature = "serenity-cached"))] {
@@ -17,8 +18,6 @@ cfg_if::cfg_if! {
     struct Cache {
       guilds: HashSet<GuildId>,
     }
-  } else {
-    use std::ops::Add;
   }
 }
 
@@ -27,7 +26,7 @@ cfg_if::cfg_if! {
 pub struct Serenity {
   #[cfg(not(feature = "serenity-cached"))]
   cache: Mutex<Cache>,
-  stats: SharedStats,
+  server_count: RwLock<usize>,
 }
 
 macro_rules! serenity_handler {
@@ -50,7 +49,7 @@ macro_rules! serenity_handler {
             cache: Mutex::const_new(Cache {
               guilds: HashSet::new(),
             }),
-            stats: SharedStats::new(),
+            server_count: RwLock::new(0),
           }
         }
 
@@ -98,9 +97,9 @@ serenity_handler! {
       }
 
       handle(guilds: &[UnavailableGuild]) {
-        let mut stats = self.stats.write().await;
+        let mut server_count = self.server_count.write().await;
 
-        stats.set_server_count(guilds.len());
+        *server_count = guilds.len();
 
         cfg_if::cfg_if! {
           if #[cfg(not(feature = "serenity-cached"))] {
@@ -119,9 +118,9 @@ serenity_handler! {
       }
 
       handle(guild_count: usize) {
-        let mut stats = self.stats.write().await;
+        let mut server_count = self.server_count.write().await;
 
-        stats.set_server_count(guild_count);
+        *server_count = guild_count;
       }
     }
 
@@ -141,17 +140,17 @@ serenity_handler! {
         cfg_if::cfg_if! {
           if #[cfg(feature = "serenity-cached")] {
             if is_new {
-              let mut stats = self.stats.write().await;
+              let mut server_count = self.server_count.write().await;
 
-              stats.set_server_count(guild_count);
+              *server_count = guild_count;
             }
           } else {
             let mut cache = self.cache.lock().await;
 
             if cache.guilds.insert(guild_id) {
-              let mut stats = self.stats.write().await;
+              let mut server_count = self.server_count.write().await;
 
-              stats.set_server_count(cache.guilds.len());
+              *server_count = cache.guilds.len();
             }
           }
         }
@@ -171,16 +170,16 @@ serenity_handler! {
         #[cfg(not(feature = "serenity-cached"))] guild_id: GuildId) {
         cfg_if::cfg_if! {
           if #[cfg(feature = "serenity-cached")] {
-            let mut stats = self.stats.write().await;
+            let mut server_count = self.server_count.write().await;
 
-            stats.set_server_count(guild_count);
+            *server_count = guild_count;
           } else {
             let mut cache = self.cache.lock().await;
 
             if cache.guilds.remove(&guild_id) {
-              let mut stats = self.stats.write().await;
+              let mut server_count = self.server_count.write().await;
 
-              stats.set_server_count(cache.guilds.len());
+              *server_count = cache.guilds.len();
             }
           }
         }
@@ -191,7 +190,7 @@ serenity_handler! {
 
 impl Handler for Serenity {
   #[inline(always)]
-  fn stats(&self) -> &SharedStats {
-    &self.stats
+  fn server_count(&self) -> &RwLock<usize> {
+    &self.server_count
   }
 }

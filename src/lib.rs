@@ -19,7 +19,6 @@ cfg_if::cfg_if! {
     pub mod user;
 
     #[doc(inline)]
-    pub use bot::Stats;
     pub use client::Client;
     pub use error::{Error, Result};
     pub use snowflake::Snowflake; // for doc purposes
@@ -33,7 +32,7 @@ cfg_if::cfg_if! {
     pub mod autoposter;
 
     #[doc(inline)]
-    pub use autoposter::{Autoposter, SharedStats};
+    pub use autoposter::Autoposter;
   }
 }
 

@@ -1,12 +1,12 @@
-use crate::autoposter::{Handler, SharedStats};
+use crate::autoposter::Handler;
 use std::{collections::HashSet, ops::DerefMut};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use twilight_model::gateway::event::Event;
 
 /// A built-in [`Handler`] for the [twilight](https://twilight.rs) library.
 pub struct Twilight {
   cache: Mutex<HashSet<u64>>,
-  stats: SharedStats,
+  server_count: RwLock<usize>,
 }
 
 impl Twilight {
@@ -14,7 +14,7 @@ impl Twilight {
   pub(super) fn new() -> Self {
     Self {
       cache: Mutex::const_new(HashSet::new()),
-      stats: SharedStats::new(),
+      server_count: RwLock::new(0),
     }
   }
 
@@ -22,21 +22,21 @@ impl Twilight {
   pub async fn handle(&self, event: &Event) {
     match event {
       Event::Ready(ready) => {
-        let mut cache = self.cache.lock().await;
-        let mut stats = self.stats.write().await;
+        let mut cache: tokio::sync::MutexGuard<'_, HashSet<u64>> = self.cache.lock().await;
+        let mut server_count = self.server_count.write().await;
         let cache_ref = cache.deref_mut();
 
         *cache_ref = ready.guilds.iter().map(|guild| guild.id.get()).collect();
-        stats.set_server_count(cache.len());
+        *server_count = cache.len();
       }
 
       Event::GuildCreate(guild_create) => {
         let mut cache = self.cache.lock().await;
 
         if cache.insert(guild_create.0.id.get()) {
-          let mut stats = self.stats.write().await;
+          let mut server_count = self.server_count.write().await;
 
-          stats.set_server_count(cache.len());
+          *server_count = cache.len();
         }
       }
 
@@ -44,9 +44,9 @@ impl Twilight {
         let mut cache = self.cache.lock().await;
 
         if cache.remove(&guild_delete.id.get()) {
-          let mut stats = self.stats.write().await;
+          let mut server_count = self.server_count.write().await;
 
-          stats.set_server_count(cache.len());
+          *server_count = cache.len();
         }
       }
 
@@ -57,7 +57,7 @@ impl Twilight {
 
 impl Handler for Twilight {
   #[inline(always)]
-  fn stats(&self) -> &SharedStats {
-    &self.stats
+  fn server_count(&self) -> &RwLock<usize> {
+    &self.server_count
   }
 }

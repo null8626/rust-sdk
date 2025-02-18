@@ -1,7 +1,7 @@
 use crate::{
-  bot::{Bot, Bots, GetBots, IsWeekend},
+  bot::{Bot, Bots, GetBots, IsWeekend, Stats},
   user::{User, Voted, Voter},
-  util, Error, Result, Snowflake, Stats,
+  util, Error, Result, Snowflake,
 };
 use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
 use serde::{de::DeserializeOwned, Deserialize};
@@ -112,12 +112,15 @@ impl InnerClient {
     }
   }
 
-  pub(crate) async fn post_stats(&self, new_stats: &Stats) -> Result<()> {
+  pub(crate) async fn post_server_count(&self, server_count: usize) -> Result<()> {
     self
       .send_inner(
         Method::POST,
         api!("/bots/stats"),
-        serde_json::to_vec(new_stats).unwrap(),
+        serde_json::to_vec(&Stats {
+          server_count: Some(server_count),
+        })
+        .unwrap(),
       )
       .await
       .map(|_| ())
@@ -195,7 +198,7 @@ impl Client {
       .await
   }
 
-  /// Fetches your bot's statistics.
+  /// Fetches your bot's posted server count.
   ///
   /// # Panics
   ///
@@ -207,11 +210,12 @@ impl Client {
   /// - An internal error from the client itself preventing it from sending a HTTP request to [Top.gg](https://top.gg) ([`InternalClientError`][crate::Error::InternalClientError])
   /// - An unexpected response from the [Top.gg](https://top.gg) servers ([`InternalServerError`][crate::Error::InternalServerError])
   /// - The client is being ratelimited from sending more HTTP requests ([`Ratelimit`][crate::Error::Ratelimit])
-  pub async fn get_stats(&self) -> Result<Stats> {
+  pub async fn get_server_count(&self) -> Result<Option<usize>> {
     self
       .inner
       .send(Method::GET, api!("/bots/stats"), None)
       .await
+      .map(|stats: Stats| stats.server_count)
   }
 
   /// Posts your bot's statistics.
@@ -227,8 +231,8 @@ impl Client {
   /// - An unexpected response from the [Top.gg](https://top.gg) servers ([`InternalServerError`][crate::Error::InternalServerError])
   /// - The client is being ratelimited from sending more HTTP requests ([`Ratelimit`][crate::Error::Ratelimit])
   #[inline(always)]
-  pub async fn post_stats(&self, new_stats: Stats) -> Result<()> {
-    self.inner.post_stats(&new_stats).await
+  pub async fn post_server_count(&self, server_count: usize) -> Result<()> {
+    self.inner.post_server_count(server_count).await
   }
 
   /// Fetches your bot's last 1000 voters.

@@ -1,11 +1,8 @@
-use crate::{Result, Stats};
-use core::{
-  ops::{Deref, DerefMut},
-  time::Duration,
-};
+use crate::Result;
+use core::{ops::Deref, time::Duration};
 use std::sync::Arc;
 use tokio::{
-  sync::{mpsc, RwLock, RwLockWriteGuard, Semaphore},
+  sync::{mpsc, RwLock},
   task::{spawn, JoinHandle},
   time::sleep,
 };
@@ -33,95 +30,12 @@ cfg_if::cfg_if! {
   }
 }
 
-/// A struct representing a thread-safe form of the [`Stats`] struct to be used in autoposter [`Handler`]s.
-pub struct SharedStats {
-  sem: Semaphore,
-  stats: RwLock<Stats>,
-}
-
-/// A guard wrapping over tokio's [`RwLockWriteGuard`] that lets you freely feed new [`Stats`] data before being sent to the [`Autoposter`].
-pub struct SharedStatsGuard<'a> {
-  sem: &'a Semaphore,
-  guard: RwLockWriteGuard<'a, Stats>,
-}
-
-impl SharedStatsGuard<'_> {
-  /// Directly replaces the current [`Stats`] inside with the other.
-  #[inline(always)]
-  pub fn replace(&mut self, other: Stats) {
-    let ref_mut = self.guard.deref_mut();
-    *ref_mut = other;
-  }
-
-  /// Sets the current [`Stats`] server count.
-  #[inline(always)]
-  pub fn set_server_count(&mut self, server_count: usize) {
-    self.guard.server_count = Some(server_count);
-  }
-
-  #[deprecated(
-    since = "1.4.3",
-    note = "No longer supported by Top.gg API v0. At the moment, this method has no effect."
-  )]
-  pub fn set_shard_count(&mut self, _shard_count: usize) {}
-}
-
-impl Deref for SharedStatsGuard<'_> {
-  type Target = Stats;
-
-  #[inline(always)]
-  fn deref(&self) -> &Self::Target {
-    self.guard.deref()
-  }
-}
-
-impl DerefMut for SharedStatsGuard<'_> {
-  #[inline(always)]
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    self.guard.deref_mut()
-  }
-}
-
-impl Drop for SharedStatsGuard<'_> {
-  #[inline(always)]
-  fn drop(&mut self) {
-    if self.sem.available_permits() < 1 {
-      self.sem.add_permits(1);
-    }
-  }
-}
-
-impl SharedStats {
-  /// Creates a new [`SharedStats`] struct. Before any modifications, the [`Stats`] struct inside defaults to zero server count.
-  #[inline(always)]
-  pub fn new() -> Self {
-    Self {
-      sem: Semaphore::const_new(0),
-      stats: RwLock::new(Stats::from(0)),
-    }
-  }
-
-  /// Locks this [`SharedStats`] with exclusive write access, causing the current task to yield until the lock has been acquired. This is akin to [`RwLock::write`].
-  #[inline(always)]
-  pub async fn write<'a>(&'a self) -> SharedStatsGuard<'a> {
-    SharedStatsGuard {
-      sem: &self.sem,
-      guard: self.stats.write().await,
-    }
-  }
-
-  #[inline(always)]
-  async fn wait(&self) {
-    self.sem.acquire().await.unwrap().forget();
-  }
-}
-
 /// A trait for handling events from third-party bot libraries.
 ///
 /// The struct implementing this trait should own an [`SharedStats`] struct and update it accordingly whenever Discord updates them with new data regarding guild/shard count.
 pub trait Handler: Send + Sync + 'static {
   /// The method that borrows [`SharedStats`] to the [`Autoposter`].
-  fn stats(&self) -> &SharedStats;
+  fn server_count(&self) -> &RwLock<usize>;
 }
 
 /// A struct that lets you automate the process of posting bot statistics to [Top.gg](https://top.gg) in intervals.
@@ -163,12 +77,13 @@ where
       handler: Arc::clone(&handler),
       thread: spawn(async move {
         loop {
-          handler.stats().wait().await;
-
           {
-            let stats = handler.stats().stats.read().await;
+            let server_count = handler.server_count().read().await;
 
-            if sender.send(client.post_stats(&stats).await).is_err() {
+            if sender
+              .send(client.post_server_count(*server_count).await)
+              .is_err()
+            {
               break;
             }
           };

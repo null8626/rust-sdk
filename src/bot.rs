@@ -18,16 +18,6 @@ where
     .map(|inner| inner.map(|support| format!("https://discord.com/invite/{support}")))
 }
 
-// TODO: remove these utility deprecation helpers soon
-
-#[inline(always)]
-fn deserialize_discriminator<'de, D>(_deserializer: D) -> Result<String, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  Ok(String::from('0'))
-}
-
 util::debug_struct! {
   /// A struct representing a bot listed on [Top.gg](https://top.gg).
   #[must_use]
@@ -40,10 +30,6 @@ util::debug_struct! {
 
       /// The username of this bot.
       username: String,
-
-      #[serde(deserialize_with = "deserialize_discriminator")]
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be '0'.")]
-      discriminator: String,
 
       /// The prefix of this bot.
       prefix: String,
@@ -76,10 +62,6 @@ util::debug_struct! {
       #[serde(deserialize_with = "snowflake::deserialize_vec")]
       owners: Vec<u64>,
 
-      #[serde(deserialize_with = "util::deserialize_immediate_default")]
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be an empty vector.")]
-      guilds: Vec<u64>,
-
       /// The URL for this bot's banner image.
       #[serde(
         default,
@@ -91,14 +73,6 @@ util::debug_struct! {
       /// The date when this bot was approved on [Top.gg](https://top.gg).
       #[serde(rename = "date")]
       approved_at: DateTime<Utc>,
-
-      #[serde(deserialize_with = "util::deserialize_immediate_default")]
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be false.")]
-      is_certified: bool,
-
-      #[serde(deserialize_with = "util::deserialize_immediate_default")]
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always be an empty vector.")]
-      shards: Vec<usize>,
 
       /// The amount of upvotes this bot has.
       #[serde(rename = "points")]
@@ -153,11 +127,6 @@ util::debug_struct! {
         }
       }
 
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return 0.")]
-      shard_count: usize => {
-        0
-      }
-
       /// Retrieves the URL of this bot's [Top.gg](https://top.gg) page.
       #[must_use]
       #[inline(always)]
@@ -171,86 +140,15 @@ util::debug_struct! {
   }
 }
 
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Stats {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub(crate) server_count: Option<usize>,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct Bots {
   pub(crate) results: Vec<Bot>,
-}
-
-util::debug_struct! {
-  #[derive(Clone, Serialize, Deserialize)]
-  #[deprecated(since = "1.4.3", note = "No longer has a use by Top.gg API v0. Soon, all you need is just your bot's server count (usize).")]
-  Stats {
-    protected {
-      #[serde(skip_serializing_if = "Option::is_none")]
-      server_count: Option<usize>,
-    }
-
-    getters(self) {
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return an empty slice.")]
-      shards: &[usize] => {
-        &[]
-      }
-
-      #[deprecated(since = "1.4.3", note = "No longer supported by Top.gg API v0. At the moment, this will always return 0.")]
-      shard_count: usize => {
-        0
-      }
-
-      server_count: Option<usize> => {
-        self.server_count
-      }
-    }
-  }
-}
-
-impl Stats {
-  /// Creates a [`Stats`] struct from the cache of a serenity [`Context`][serenity::client::Context].
-  #[inline(always)]
-  #[cfg(feature = "serenity-cached")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "serenity-cached")))]
-  pub fn from_context(context: &serenity::client::Context) -> Self {
-    Self::from_count(
-      context.cache.guilds().len(),
-      Some(context.cache.shard_count() as _),
-    )
-  }
-
-  #[deprecated(
-    since = "1.4.3",
-    note = "The shard_count argument no longer has an effect."
-  )]
-  pub const fn from_count(server_count: usize, _shard_count: Option<usize>) -> Self {
-    Self {
-      server_count: Some(server_count),
-    }
-  }
-
-  #[deprecated(
-    since = "1.4.3",
-    note = "No longer supported by Top.gg API v0. At the moment, the shard_index argument has no effect."
-  )]
-  pub fn from_shards<A>(shards: A, _shard_index: Option<usize>) -> Self
-  where
-    A: IntoIterator<Item = usize>,
-  {
-    let mut total_server_count = 0;
-    let shards = shards.into_iter();
-
-    for server_count in shards {
-      total_server_count += server_count;
-    }
-
-    Self {
-      server_count: Some(total_server_count),
-    }
-  }
-}
-
-impl From<usize> for Stats {
-  #[inline(always)]
-  fn from(server_count: usize) -> Self {
-    Self::from_count(server_count, None)
-  }
 }
 
 #[derive(Deserialize)]
