@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(feature = "webhook", allow(unreachable_patterns))]
 
 mod snowflake;
 #[cfg(test)]
