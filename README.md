@@ -34,23 +34,6 @@ This library provides several feature flags that can be enabled/disabled in `Car
 
 ## Examples
 
-### Fetching a user from its Discord ID
-
-```rust,no_run
-use topgg::Client;
-
-#[tokio::main]
-async fn main() {
-  let client = Client::new(env!("TOPGG_TOKEN").to_string());
-  let user = client.get_user(661200758510977084).await.unwrap();
-  
-  assert_eq!(user.username, "null");
-  assert_eq!(user.id, 661200758510977084);
-  
-  println!("{:?}", user);
-}
-```
-
 ### Fetching a bot from its Discord ID
 
 ```rust,no_run

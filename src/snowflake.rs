@@ -56,8 +56,7 @@ cfg_if::cfg_if! {
 
     impl_topgg_idstruct!(
       crate::bot::Bot,
-      crate::user::User,
-      crate::user::Voter
+      crate::voter::Voter
     );
   }
 }

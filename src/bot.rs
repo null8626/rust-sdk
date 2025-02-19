@@ -34,9 +34,13 @@ util::debug_struct! {
   #[derive(Clone, Deserialize)]
   Bot {
     public {
-      /// The ID of this bot.
-      #[serde(deserialize_with = "snowflake::deserialize")]
+      /// The application ID of this bot.
+      #[serde(rename = "clientid", deserialize_with = "snowflake::deserialize")]
       id: u64,
+
+      /// The Top.gg user ID of this bot.
+      #[serde(rename = "id", deserialize_with = "snowflake::deserialize")]
+      topgg_id: u64,
 
       /// The username of this bot.
       username: String,
