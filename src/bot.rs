@@ -305,6 +305,9 @@ impl<'a> GetBots<'a> {
   }
 
   get_bots_sort! {
+    /// Sorts results based on each bot's ID.
+    sort_by_id: id,
+
     /// Sorts results based on each bot's approval date.
     sort_by_approval_date: date,
 
