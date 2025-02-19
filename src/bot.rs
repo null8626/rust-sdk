@@ -258,7 +258,7 @@ pub(crate) struct IsWeekend {
   pub(crate) is_weekend: bool,
 }
 
-// A struct for configuring the query in [`get_bots`][crate::Client::get_bots] before being sent to the [Top.gg API](https://docs.top.gg) by `await`ing it.
+/// A struct for configuring the query in [`get_bots`][crate::Client::get_bots] before being sent to the [Top.gg API](https://docs.top.gg) by `await`ing it.
 #[must_use]
 pub struct GetBots<'a> {
   client: &'a Client,
@@ -316,16 +316,16 @@ impl<'a> GetBots<'a> {
   }
 
   get_bots_method! {
-    /// Sets the maximum amount of bots to be queried.
+    /// Sets the maximum amount of bots to be queried. This cannot be more than 500.
     limit: u16 = query("limit={}&", min(limit, 500));
 
-    /// Sets the amount of bots to be skipped during the query.
+    /// Sets the amount of bots to be skipped during the query. This cannot be more than 499.
     skip: u16 = query("offset={}&", min(skip, 499));
 
-    /// Queries only Discord bots that matches this username.
+    /// Queries only Discord bots that has this username.
     username: &str = search("username%3A%20{}%20", urlencoding::encode(username));
 
-    /// Queries only Discord bots that matches this prefix.
+    /// Queries only Discord bots that has this prefix.
     prefix: &str = search("prefix%3A%20{}%20", urlencoding::encode(prefix));
 
     /// Queries only Discord bots that has this vote count.
