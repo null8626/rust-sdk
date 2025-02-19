@@ -36,3 +36,7 @@ jobs:
           cargo clippy --features axum
           cargo clippy --features warp
           cargo clippy --features actix-web
+#       - name: Run tests
+#         run: cargo test
+#         env:
+#           TOPGG_TOKEN: ${{ secrets.TOPGG_TOKEN }}

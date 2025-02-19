@@ -1,7 +1,8 @@
 use crate::{
   bot::{Bot, Bots, GetBots, IsWeekend, Stats},
-  user::{User, Voted, Voter},
-  util, Error, Result, Snowflake,
+  util,
+  voter::{Voted, Voter},
+  Error, Result, Snowflake,
 };
 use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
 use serde::{de::DeserializeOwned, Deserialize};
@@ -36,16 +37,16 @@ macro_rules! api {
 #[derive(Debug)]
 pub struct InnerClient {
   http: reqwest::Client,
+  id: u64,
   token: String,
 }
 
 // this is implemented here because autoposter needs to access this struct from a different thread.
 impl InnerClient {
-  pub(crate) fn new(mut token: String) -> Self {
-    token.insert_str(0, "Bearer ");
-
+  pub(crate) fn new(token: String) -> Self {
     Self {
       http: reqwest::Client::new(),
+      id: util::id_from_token(&token),
       token,
     }
   }
@@ -148,31 +149,6 @@ impl Client {
     Self { inner }
   }
 
-  /// Fetches a user from a Discord ID.
-  ///
-  /// # Panics
-  ///
-  /// Panics if any of the following conditions are met:
-  /// - The ID argument is a string but not numeric
-  /// - The client uses an invalid [Top.gg API](https://docs.top.gg) token (unauthorized)
-  ///
-  /// # Errors
-  ///
-  /// Errors if any of the following conditions are met:
-  /// - An internal error from the client itself preventing it from sending a HTTP request to [Top.gg](https://top.gg) ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - An unexpected response from the [Top.gg](https://top.gg) servers ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - The requested user does not exist ([`NotFound`][crate::Error::NotFound])
-  /// - The client is being ratelimited from sending more HTTP requests ([`Ratelimit`][crate::Error::Ratelimit])
-  pub async fn get_user<I>(&self, id: I) -> Result<User>
-  where
-    I: Snowflake,
-  {
-    self
-      .inner
-      .send(Method::GET, api!("/users/{}", id.as_snowflake()), None)
-      .await
-  }
-
   /// Fetches a listed bot from a Discord ID.
   ///
   /// # Panics
@@ -250,7 +226,7 @@ impl Client {
   pub async fn get_voters(&self) -> Result<Vec<Voter>> {
     self
       .inner
-      .send(Method::GET, api!("/bots/votes"), None)
+      .send(Method::GET, api!("/bots/{}/votes", self.inner.id), None)
       .await
   }
 
@@ -323,7 +299,11 @@ impl Client {
       .inner
       .send::<Voted>(
         Method::GET,
-        api!("/bots/check?userId={}", user_id.as_snowflake()),
+        api!(
+          "/bots/{}/check?userId={}",
+          self.inner.id,
+          user_id.as_snowflake()
+        ),
         None,
       )
       .await

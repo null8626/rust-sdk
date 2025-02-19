@@ -18,8 +18,8 @@ cfg_if::cfg_if! {
     /// Bot-related traits and structs.
     pub mod bot;
 
-    /// User-related structs.
-    pub mod user;
+    /// Voter-related structs.
+    pub mod voter;
 
     #[doc(inline)]
     pub use client::Client;
