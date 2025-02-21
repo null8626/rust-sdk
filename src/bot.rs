@@ -33,7 +33,8 @@ util::debug_struct! {
       topgg_id: u64,
 
       /// The username of this bot.
-      username: String,
+      #[serde(rename = "username")]
+      name: String,
 
       /// The prefix of this bot.
       prefix: String,
