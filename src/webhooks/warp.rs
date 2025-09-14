@@ -1,35 +1,34 @@
-use crate::{Vote, VoteHandler};
+use super::Webhook;
+use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use warp::{body, header, http::StatusCode, path, Filter, Rejection, Reply};
 
-/// Creates a new `warp` [`Filter`] for adding an on-vote event handler to your application logic.
+/// Creates a new warp [`Filter`] for receiving webhook events.
 ///
-/// # Examples
-///
-/// Basic usage:
+/// # Example
 ///
 /// ```rust,no_run
 /// use std::{net::SocketAddr, sync::Arc};
-/// use topgg::{Vote, VoteHandler};
+/// use topgg::{VoteEvent, Webhook};
 /// use warp::Filter;
 ///
-/// struct MyVoteHandler {}
+/// struct MyVoteListener {}
 ///
 /// #[async_trait::async_trait]
-/// impl VoteHandler for MyVoteHandler {
-///   async fn voted(&self, vote: Vote) {
-///     println!("{:?}", vote);
+/// impl Webhook<VoteEvent> for MyVoteListener {
+///   async fn callback(&self, vote: VoteEvent) {
+///     println!("A user with the ID of {} has voted us on Top.gg!", vote.voter_id);
 ///   }
 /// }
 ///
 /// #[tokio::main]
 /// async fn main() {
-///   let state = Arc::new(MyVoteHandler {});
+///   let state = Arc::new(MyVoteListener {});
 ///
-///   // POST /webhook
+///   // POST /votes
 ///   let webhook = topgg::warp::webhook(
-///     "webhook",
-///     env!("TOPGG_WEBHOOK_PASSWORD").to_string(),
+///     "votes",
+///     env!("MY_TOPGG_WEBHOOK_SECRET").to_string(),
 ///     Arc::clone(&state),
 ///   );
 ///
@@ -41,13 +40,14 @@ use warp::{body, header, http::StatusCode, path, Filter, Rejection, Reply};
 /// }
 /// ```
 #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-pub fn webhook<T>(
+pub fn webhook<D, T>(
   endpoint: &'static str,
   password: String,
   state: Arc<T>,
 ) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone
 where
-  T: VoteHandler,
+  D: DeserializeOwned + Send,
+  T: Webhook<D>,
 {
   let password = Arc::new(password);
 
@@ -55,15 +55,15 @@ where
     .and(path(endpoint))
     .and(header("Authorization"))
     .and(body::json())
-    .then(move |auth: String, vote: Vote| {
+    .then(move |auth: String, data: D| {
       let current_state = Arc::clone(&state);
       let current_password = Arc::clone(&password);
 
       async move {
         if auth == *current_password {
-          current_state.voted(vote).await;
+          current_state.callback(data).await;
 
-          StatusCode::OK
+          StatusCode::NO_CONTENT
         } else {
           StatusCode::UNAUTHORIZED
         }
