@@ -1,37 +1,17 @@
-use super::{snowflake, Error};
+use super::{Error, snowflake};
 
 use base64::Engine;
 use reqwest::Response;
-use serde::{de::DeserializeOwned, Deserialize, Deserializer};
-
-#[allow(clippy::unnecessary_wraps)]
-pub fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  Ok(
-    String::deserialize(deserializer)
-      .ok()
-      .filter(|s| !s.is_empty()),
-  )
-}
-
-pub fn deserialize_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-  T: Default + Deserialize<'de>,
-  D: Deserializer<'de>,
-{
-  Option::deserialize(deserializer).map(Option::unwrap_or_default)
-}
+use serde::{Deserialize, de::DeserializeOwned};
 
 pub async fn parse_json<T>(response: Response) -> super::Result<T>
 where
   T: DeserializeOwned,
 {
-  if let Ok(bytes) = response.bytes().await {
-    if let Ok(json) = serde_json::from_slice(&bytes) {
-      return Ok(json);
-    }
+  if let Ok(bytes) = response.bytes().await
+    && let Ok(json) = serde_json::from_slice(&bytes)
+  {
+    return Ok(json);
   }
 
   Err(Error::InternalServerError)
@@ -45,14 +25,12 @@ struct TokenStructure {
 }
 
 pub fn parse_api_token(token: &str) -> u64 {
-  if let Some(base64_section) = token.split('.').nth(1) {
-    if let Ok(decoded_base64) =
+  if let Some(base64_section) = token.split('.').nth(1)
+    && let Ok(decoded_base64) =
       base64::engine::general_purpose::STANDARD_NO_PAD.decode(base64_section)
-    {
-      if let Ok(token_structure) = serde_json::from_slice::<TokenStructure>(&decoded_base64) {
-        return token_structure.id;
-      }
-    }
+    && let Ok(token_structure) = serde_json::from_slice::<TokenStructure>(&decoded_base64)
+  {
+    return token_structure.id;
   }
 
   panic!("Got a malformed API token.");

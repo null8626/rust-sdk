@@ -1,9 +1,10 @@
 use super::{
-  util, Error, GetCommands, PostBotCommandsError, PostBotCommandsResult, Project, Result,
+  Error, GetCommands, PostBotCommandsError, PostBotCommandsResult, Project, Result, Snowflake,
+  UserSource, Vote, util,
 };
 
-use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use reqwest::{IntoUrl, Method, Response, StatusCode, Version, header};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[macro_export]
 macro_rules! api {
@@ -12,17 +13,11 @@ macro_rules! api {
   };
 
   ($e:literal, $($rest:tt)*) => {
-    format!($super::client::api!($e), $($rest)*)
+    format!($crate::client::api!($e), $($rest)*)
   };
 }
 
 pub(crate) use api;
-
-#[derive(Deserialize)]
-struct ErrorJson {
-  #[serde(default, alias = "message", alias = "detail")]
-  message: Option<String>,
-}
 
 #[derive(Deserialize)]
 #[serde(rename = "kebab-case")]
@@ -93,12 +88,7 @@ impl Client {
           Err(match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => panic!("Invalid API token."),
 
-            StatusCode::NOT_FOUND => Error::NotFound(
-              util::parse_json::<ErrorJson>(response)
-                .await
-                .ok()
-                .and_then(|err| err.message),
-            ),
+            StatusCode::NOT_FOUND => Error::NotFound,
 
             StatusCode::TOO_MANY_REQUESTS => util::parse_json::<Ratelimit>(response).await.map_or(
               Error::InternalServerError,
@@ -204,6 +194,61 @@ impl Client {
       Ok(_) => Ok(()),
 
       Err(err) => Err(PostBotCommandsError::Request(err)),
+    }
+  }
+
+  /// Gets the latest vote information of a user on your project. Returns [`None`] if the user has not voted.
+  ///
+  /// # Panics
+  ///
+  /// Panics if:
+  /// - The specified ID is invalid.
+  /// - The client uses an invalid API token.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`Err`] if:
+  /// - The specified user has not logged in to Top.gg. ([`NotFound`][super::Error::NotFound])
+  /// - HTTP request failure from the client-side. ([`InternalClientError`][super::Error::InternalClientError])
+  /// - HTTP request failure from the server-side. ([`InternalServerError`][super::Error::InternalServerError])
+  /// - Ratelimited from sending more requests. ([`Ratelimit`][super::Error::Ratelimit])
+  ///
+  /// # Example
+  ///
+  /// ```rust,no_run
+  /// use topgg::UserSource;
+  ///
+  /// // Discord ID:
+  /// let vote = client.get_vote(UserSource::Discord(661200758510977084)).await.unwrap();
+  ///
+  /// // Top.gg ID:
+  /// let vote = client.get_vote(UserSource::Topgg(8226924471638491136)).await.unwrap();
+  /// ```
+  pub async fn get_vote<S>(&self, user: UserSource<S>) -> Result<Option<Vote>>
+  where
+    S: Snowflake,
+  {
+    match self
+      .send(
+        Method::GET,
+        api!(
+          "/projects/@me/votes/{}?source={}",
+          user.as_snowflake(),
+          user.name()
+        ),
+        None,
+      )
+      .await
+    {
+      Ok(vote) => Ok(Some(vote)),
+
+      Err(err) => {
+        if matches!(err, Error::NotFound) {
+          return Ok(None);
+        }
+
+        Err(err)
+      }
     }
   }
 }

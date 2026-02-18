@@ -2,7 +2,7 @@ use super::Webhook;
 use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
-use warp::{body, header, http::StatusCode, path, Filter, Rejection, Reply};
+use warp::{Filter, Rejection, Reply, body, header, http::StatusCode, path};
 
 /// Creates a new warp [`Filter`] for receiving webhook events.
 ///

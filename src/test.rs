@@ -1,6 +1,6 @@
 use super::Client;
 
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 macro_rules! delayed {
   ($($b:tt)*) => {

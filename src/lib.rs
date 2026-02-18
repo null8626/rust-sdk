@@ -12,12 +12,14 @@ cfg_if::cfg_if! {
     pub(crate) mod client;
     mod error;
     mod project;
+    mod user;
     mod util;
 
     pub use client::Client;
     pub use error::{Error, PostBotCommandsError, PostBotCommandsResult, Result};
-    pub use snowflake::Snowflake; // for doc purposes
     pub use project::{GetCommands, Project, ProjectType, Platform};
+    pub use snowflake::Snowflake; // for doc purposes
+    pub use user::{UserSource, Vote};
 
     #[doc(hidden)]
     #[cfg(any(feature = "twilight", feature = "twilight-cached"))]

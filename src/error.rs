@@ -14,8 +14,8 @@ pub enum Error {
   /// Attempted to send an invalid request to the API.
   InvalidRequest,
 
-  /// Such query does not exist. Inside is the message from the API if available.
-  NotFound(Option<String>),
+  /// Such query does not exist.
+  NotFound,
 
   /// Ratelimited from sending more requests.
   Ratelimit {
@@ -33,11 +33,7 @@ impl fmt::Display for Error {
 
       Self::InvalidRequest => write!(f, "Invalid Request"),
 
-      Self::NotFound(message) => write!(
-        f,
-        "Not Found: {}",
-        message.as_deref().unwrap_or("<no message>")
-      ),
+      Self::NotFound => write!(f, "Not Found"),
 
       Self::Ratelimit { retry_after } => write!(
         f,

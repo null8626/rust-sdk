@@ -2,11 +2,11 @@ use super::Webhook;
 use std::sync::Arc;
 
 use axum::{
+  Router,
   extract::State,
   http::{HeaderMap, StatusCode},
   response::IntoResponse,
   routing::post,
-  Router,
 };
 use serde::de::DeserializeOwned;
 

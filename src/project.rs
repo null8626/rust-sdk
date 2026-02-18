@@ -1,6 +1,6 @@
 use super::snowflake;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// A project listed on Top.gg.
 #[derive(Deserialize)]
@@ -40,14 +40,14 @@ pub struct Project {
   pub review_count: u64,
 }
 
-/// A [`Project`]'s platform.
+/// A project's platform.
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
   Discord,
 }
 
-/// A [`Project`]'s type.
+/// A project's type.
 #[derive(Deserialize)]
 pub enum ProjectType {
   #[serde(rename = "bot")]
