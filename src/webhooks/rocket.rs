@@ -24,6 +24,7 @@ where
           authorization: authorization.to_owned(),
           data: data.into_inner(),
         }),
+
         _ => Outcome::Error((Status::BadRequest, ())),
       };
     }

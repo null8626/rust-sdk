@@ -3,10 +3,8 @@ use base64::Engine;
 use reqwest::Response;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
-#[inline(always)]
-pub(crate) fn deserialize_optional_string<'de, D>(
-  deserializer: D,
-) -> Result<Option<String>, D::Error>
+#[allow(clippy::unnecessary_wraps)]
+pub fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
   D: Deserializer<'de>,
 {
@@ -17,8 +15,7 @@ where
   )
 }
 
-#[inline(always)]
-pub(crate) fn deserialize_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub fn deserialize_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
   T: Default + Deserialize<'de>,
   D: Deserializer<'de>,
@@ -26,8 +23,7 @@ where
   Option::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
-#[inline(always)]
-pub(crate) async fn parse_json<T>(response: Response) -> crate::Result<T>
+pub async fn parse_json<T>(response: Response) -> crate::Result<T>
 where
   T: DeserializeOwned,
 {
@@ -47,7 +43,7 @@ struct TokenStructure {
   id: u64,
 }
 
-pub(crate) fn parse_api_token(token: &str) -> u64 {
+pub fn parse_api_token(token: &str) -> u64 {
   if let Some(base64_section) = token.split('.').nth(1) {
     if let Ok(decoded_base64) =
       base64::engine::general_purpose::STANDARD_NO_PAD.decode(base64_section)

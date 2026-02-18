@@ -39,23 +39,6 @@ actix-web = { version = "4", default-features = false, optional = true }
 tokio = { version = "1", features = ["rt", "macros"] }
 twilight-gateway = "0.15"
 
-[lints.clippy]
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-cast-lossless = "allow"
-cast-possible-truncation = "allow"
-cast-possible-wrap = "allow"
-cast-sign-loss = "allow"
-inline-always = "allow"
-module-name-repetitions = "allow"
-must-use-candidate = "allow"
-return-self-not-must-use = "allow"
-similar-names = "allow"
-single-match-else = "allow"
-too-many-lines = "allow"
-unnecessary-wraps = "allow"
-unreadable-literal = "allow"
-
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
@@ -64,8 +47,6 @@ rustc-args = ["--cfg", "docsrs"]
 [features]
 default = ["api"]
 api = ["async-trait", "base64", "chrono", "reqwest", "serde_json"]
-bot-autoposter = ["api", "tokio"]
-autoposter = ["bot-autoposter"]
 
 serenity = ["dep:serenity", "paste"]
 serenity-cached = ["serenity", "serenity/cache"]
@@ -78,3 +59,14 @@ rocket = ["webhooks", "dep:rocket"]
 axum = ["webhooks", "async-trait", "serde_json", "dep:axum"]
 warp = ["webhooks", "async-trait", "dep:warp"]
 actix-web = ["webhooks", "dep:actix-web"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }

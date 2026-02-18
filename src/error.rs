@@ -26,13 +26,17 @@ impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::InternalClientError(err) => write!(f, "Internal Client Error: {err}"),
+
       Self::InternalServerError => write!(f, "Internal Server Error"),
+
       Self::InvalidRequest => write!(f, "Invalid Request"),
+
       Self::NotFound(message) => write!(
         f,
         "Not Found: {}",
         message.as_deref().unwrap_or("<no message>")
       ),
+
       Self::Ratelimit { retry_after } => write!(
         f,
         "Blocked by the API for an hour. Please try again in {retry_after} seconds",
@@ -42,10 +46,10 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-  #[inline(always)]
   fn source(&self) -> Option<&(dyn error::Error + 'static)> {
     match self {
       Self::InternalClientError(err) => err.source(),
+
       _ => None,
     }
   }
