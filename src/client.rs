@@ -36,8 +36,6 @@ pub struct Client {
 impl Client {
   /// Creates a new instance.
   ///
-  /// To retrieve your API token, [see this tutorial](https://github.com/top-gg-community/rust-sdk/assets/60427892/d2df5bd3-bc48-464c-b878-a04121727bff).
-  ///
   /// # Panics
   ///
   /// Panics if the client uses an invalid API token.
