@@ -1,4 +1,10 @@
-use crate::Incoming;
+use super::Incoming;
+use std::{
+  future::Future,
+  pin::Pin,
+  task::{ready, Context, Poll},
+};
+
 use actix_web::{
   dev::Payload,
   error::{Error, ErrorBadRequest, ErrorUnauthorized},
@@ -6,11 +12,6 @@ use actix_web::{
   FromRequest, HttpRequest,
 };
 use serde::de::DeserializeOwned;
-use std::{
-  future::Future,
-  pin::Pin,
-  task::{ready, Context, Poll},
-};
 
 #[doc(hidden)]
 pub struct IncomingFut<T: DeserializeOwned> {

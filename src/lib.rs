@@ -11,11 +11,13 @@ cfg_if::cfg_if! {
   if #[cfg(feature = "api")] {
     pub(crate) mod client;
     mod error;
+    mod project;
     mod util;
 
     pub use client::Client;
     pub use error::{Error, Result};
     pub use snowflake::Snowflake; // for doc purposes
+    pub use project::{Project, ProjectType, Platform};
 
     #[doc(hidden)]
     #[cfg(any(feature = "twilight", feature = "twilight-cached"))]

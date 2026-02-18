@@ -1,4 +1,6 @@
 use super::Webhook;
+use std::sync::Arc;
+
 use axum::{
   extract::State,
   http::{HeaderMap, StatusCode},
@@ -7,7 +9,6 @@ use axum::{
   Router,
 };
 use serde::de::DeserializeOwned;
-use std::sync::Arc;
 
 struct WebhookState<T> {
   state: Arc<T>,

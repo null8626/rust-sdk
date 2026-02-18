@@ -1,4 +1,5 @@
-use crate::{snowflake, Error};
+use super::{snowflake, Error};
+
 use base64::Engine;
 use reqwest::Response;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
@@ -23,7 +24,7 @@ where
   Option::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
-pub async fn parse_json<T>(response: Response) -> crate::Result<T>
+pub async fn parse_json<T>(response: Response) -> super::Result<T>
 where
   T: DeserializeOwned,
 {

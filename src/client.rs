@@ -1,15 +1,16 @@
-use crate::{util, Error, Result};
+use super::{util, Error, Project, Result};
+
 use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
 use serde::{de::DeserializeOwned, Deserialize};
 
 #[macro_export]
 macro_rules! api {
   ($e:literal) => {
-    concat!("https://top.gg/api/v1/", $e)
+    concat!("https://top.gg/api/v1", $e)
   };
 
   ($e:literal, $($rest:tt)*) => {
-    format!($crate::client::api!($e), $($rest)*)
+    format!($super::client::api!($e), $($rest)*)
   };
 }
 
@@ -120,5 +121,28 @@ impl Client {
 
       Err(err) => Err(err),
     }
+  }
+
+  /// Gets your project's information.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the client uses an invalid API token.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`Err`] if:
+  /// - The specified bot does not exist. ([`NotFound`][super::Error::NotFound])
+  /// - HTTP request failure from the client-side. ([`InternalClientError`][super::Error::InternalClientError])
+  /// - HTTP request failure from the server-side. ([`InternalServerError`][super::Error::InternalServerError])
+  /// - Ratelimited from sending more requests. ([`Ratelimit`][super::Error::Ratelimit])
+  ///
+  /// # Example
+  ///
+  /// ```rust,no_run
+  /// let project = client.get_self().await.unwrap();
+  /// ```
+  pub async fn get_self(&self) -> Result<Project> {
+    self.send(Method::GET, api!("/projects/@me"), None).await
   }
 }

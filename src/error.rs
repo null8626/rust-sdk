@@ -1,6 +1,6 @@
 use std::{error, fmt, result};
 
-/// An error coming from this SDK.
+/// An error coming from the SDK.
 #[derive(Debug)]
 pub enum Error {
   /// HTTP request failure from the client-side.
