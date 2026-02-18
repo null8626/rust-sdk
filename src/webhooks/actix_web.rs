@@ -53,7 +53,6 @@ where
   type Error = Error;
   type Future = IncomingFut<T>;
 
-  #[inline(always)]
   fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
     IncomingFut {
       req: req.clone(),

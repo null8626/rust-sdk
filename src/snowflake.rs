@@ -19,7 +19,6 @@ cfg_if::cfg_if! {
       ($(#[$attr:meta] )?$self:ident,$t:ty,$body:expr) => {
         $(#[$attr])?
         impl Snowflake for $t {
-          #[inline(always)]
           fn as_snowflake(&$self) -> u64 {
             $body
           }

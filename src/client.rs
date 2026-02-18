@@ -1,7 +1,9 @@
-use super::{util, Error, Project, Result};
+use super::{
+  util, Error, GetCommands, PostBotCommandsError, PostBotCommandsResult, Project, Result,
+};
 
 use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[macro_export]
 macro_rules! api {
@@ -90,12 +92,14 @@ impl Client {
         } else {
           Err(match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => panic!("Invalid API token."),
+
             StatusCode::NOT_FOUND => Error::NotFound(
               util::parse_json::<ErrorJson>(response)
                 .await
                 .ok()
                 .and_then(|err| err.message),
             ),
+
             StatusCode::TOO_MANY_REQUESTS => util::parse_json::<Ratelimit>(response).await.map_or(
               Error::InternalServerError,
               |ratelimit| Error::Ratelimit {
@@ -144,5 +148,62 @@ impl Client {
   /// ```
   pub async fn get_self(&self) -> Result<Project> {
     self.send(Method::GET, api!("/projects/@me"), None).await
+  }
+
+  /// Updates the application commands list in your Discord bot's Top.gg page.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the client uses an invalid API token.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`Err`] if:
+  /// - Unable to retrieve the list of bot commands. ([`PostBotCommandsError::Retrieval`][super::PostBotCommandsError::Retrieval])
+  /// - Unable to serialize the list of bot commands. ([`PostBotCommandsError::Serialization`][super::PostBotCommandsError::Serialization])
+  /// - The list of bot commands supplied do not match [Discord API's raw JSON format](https://discord.com/developers/docs/interactions/application-commands#application-command-object). ([`Error::InvalidRequest`][super::Error::InvalidRequest])
+  /// - HTTP request failure from the client-side. ([`Error::InternalClientError`][super::Error::InternalClientError])
+  /// - HTTP request failure from the server-side. ([`Error::InternalServerError`][super::Error::InternalServerError])
+  /// - Ratelimited from sending more requests. ([`Error::Ratelimit`][super::Error::Ratelimit])
+  ///
+  /// # Example
+  ///
+  /// ```rust,no_run
+  /// // Serenity:
+  /// client.post_commands(&ctx).await.unwrap();
+  ///
+  /// // Twilight:
+  /// let application_id = bot.current_user_application().await.unwrap().model().await.unwrap().id;
+  /// let interaction = bot.interaction(application_id);
+  ///
+  /// client.post_commands(interaction.global_commands()).await.unwrap();
+  ///
+  /// // Others:
+  /// let commands = vec![...]; // Array of application commands that
+  ///                           // can be serialized to Discord API's raw JSON format.
+  /// client.post_commands(commands).await.unwrap();
+  /// ```
+  pub async fn post_commands<L, C, E>(&self, context: C) -> PostBotCommandsResult<(), E>
+  where
+    L: Serialize + DeserializeOwned,
+    C: GetCommands<L, E>,
+  {
+    let commands = context
+      .get_commands()
+      .await
+      .map_err(PostBotCommandsError::Retrieval)?;
+
+    match self
+      .send_inner(
+        Method::POST,
+        api!("/projects/@me/commands"),
+        serde_json::to_vec(&commands).map_err(PostBotCommandsError::Serialization)?,
+      )
+      .await
+    {
+      Ok(_) => Ok(()),
+
+      Err(err) => Err(PostBotCommandsError::Request(err)),
+    }
   }
 }

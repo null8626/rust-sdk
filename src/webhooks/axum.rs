@@ -16,7 +16,6 @@ struct WebhookState<T> {
 }
 
 impl<T> Clone for WebhookState<T> {
-  #[inline(always)]
   fn clone(&self) -> Self {
     Self {
       state: Arc::clone(&self.state),
@@ -62,7 +61,6 @@ impl<T> Clone for WebhookState<T> {
 ///   axum::serve(listener, router).await.unwrap();
 /// }
 /// ```
-#[inline(always)]
 #[cfg_attr(docsrs, doc(cfg(feature = "axum")))]
 pub fn webhook<D, T>(password: String, state: Arc<T>) -> Router
 where

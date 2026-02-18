@@ -33,7 +33,6 @@ cfg_if::cfg_if! {
     impl<T> Incoming<T> {
       /// Authenticates a valid password with this request.
       #[must_use]
-      #[inline(always)]
       pub fn authenticate(self, password: &str) -> Option<T> {
         if self.authorization == password {
           Some(self.data)
@@ -47,7 +46,6 @@ cfg_if::cfg_if! {
     where
       T: Clone,
     {
-      #[inline(always)]
       fn clone(&self) -> Self {
         Self {
           authorization: self.authorization.clone(),

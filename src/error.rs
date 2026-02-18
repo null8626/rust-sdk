@@ -1,5 +1,7 @@
 use std::{error, fmt, result};
 
+use serde_json::Error as SerdeJsonError;
+
 /// An error coming from the SDK.
 #[derive(Debug)]
 pub enum Error {
@@ -55,5 +57,51 @@ impl error::Error for Error {
   }
 }
 
+/// An error coming from [`Client::post_commands`][super::Client::post_commands].
+#[derive(Debug)]
+pub enum PostBotCommandsError<E> {
+  /// Error happened while retrieving the bot commands in [`GetCommands`][super::GetCommands].
+  Retrieval(E),
+
+  /// Error happened while serializing the bot commands.
+  Serialization(SerdeJsonError),
+
+  /// Error happened while sending the HTTP request.
+  Request(Error),
+}
+
+impl<E> fmt::Display for PostBotCommandsError<E>
+where
+  E: fmt::Debug,
+{
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Retrieval(err) => write!(f, "Error while retrieving bot commands: {err:?}"),
+
+      Self::Serialization(err) => write!(f, "Error while serializing bot commands: {err:?}"),
+
+      Self::Request(err) => write!(f, "Error while posting bot commands: {err:?}"),
+    }
+  }
+}
+
+impl<E> error::Error for PostBotCommandsError<E>
+where
+  E: error::Error + 'static,
+{
+  fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+    match self {
+      Self::Retrieval(err) => Some(err),
+
+      Self::Serialization(err) => Some(err),
+
+      Self::Request(err) => err.source(),
+    }
+  }
+}
+
 /// The result type primarily used in this SDK.
 pub type Result<T> = result::Result<T, Error>;
+
+/// The result type used in [`Client::post_commands`][super::Client::post_commands].
+pub type PostBotCommandsResult<T, E> = result::Result<T, PostBotCommandsError<E>>;
