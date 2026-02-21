@@ -123,7 +123,6 @@ impl Client {
   /// # Errors
   ///
   /// Returns [`Err`] if:
-  /// - The specified bot does not exist. ([`NotFound`][super::Error::NotFound])
   /// - HTTP request failure from the client-side. ([`InternalClientError`][super::Error::InternalClientError])
   /// - HTTP request failure from the server-side. ([`InternalServerError`][super::Error::InternalServerError])
   /// - Ratelimited from sending more requests. ([`Ratelimit`][super::Error::Ratelimit])
