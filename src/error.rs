@@ -55,7 +55,7 @@ impl error::Error for Error {
 
 /// An error coming from [`Client::post_commands`][super::Client::post_commands].
 #[derive(Debug)]
-pub enum PostBotCommandsError<E> {
+pub enum PostCommandsError<E> {
   /// Error happened while retrieving the bot commands in [`GetCommands`][super::GetCommands].
   Retrieval(E),
 
@@ -66,7 +66,7 @@ pub enum PostBotCommandsError<E> {
   Request(Error),
 }
 
-impl<E> fmt::Display for PostBotCommandsError<E>
+impl<E> fmt::Display for PostCommandsError<E>
 where
   E: fmt::Debug,
 {
@@ -81,7 +81,7 @@ where
   }
 }
 
-impl<E> error::Error for PostBotCommandsError<E>
+impl<E> error::Error for PostCommandsError<E>
 where
   E: error::Error + 'static,
 {
@@ -100,4 +100,4 @@ where
 pub type Result<T> = result::Result<T, Error>;
 
 /// The result type used in [`Client::post_commands`][super::Client::post_commands].
-pub type PostBotCommandsResult<T, E> = result::Result<T, PostBotCommandsError<E>>;
+pub type PostCommandsResult<T, E> = result::Result<T, PostCommandsError<E>>;

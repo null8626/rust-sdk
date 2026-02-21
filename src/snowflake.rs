@@ -10,6 +10,7 @@ where
 cfg_if::cfg_if! {
   if #[cfg(feature = "api")] {
     /// Any data type that can be interpreted as a Discord ID.
+    #[cfg_attr(docsrs, doc(cfg(feature = "api")))]
     pub trait Snowflake {
       /// Converts this value to a [`u64`].
       fn as_snowflake(&self) -> u64;

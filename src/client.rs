@@ -1,8 +1,9 @@
 use super::{
-  Error, GetCommands, PostBotCommandsError, PostBotCommandsResult, Project, Result, Snowflake,
-  UserSource, Vote, util,
+  Error, GetCommands, PaginatedVotes, PaginatedVotesOwned, PartialVote, PostCommandsError,
+  PostCommandsResult, Project, Result, Snowflake, UserSource, util,
 };
 
+use chrono::{DateTime, SecondsFormat, TimeZone};
 use reqwest::{IntoUrl, Method, Response, StatusCode, Version, header};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
@@ -17,7 +18,7 @@ macro_rules! api {
   };
 }
 
-pub(crate) use api;
+pub(super) use api;
 
 #[derive(Deserialize)]
 #[serde(rename = "kebab-case")]
@@ -25,12 +26,11 @@ struct Ratelimit {
   retry_after: u16,
 }
 
-/// Interact with the v1 API's endpoints.
+/// Interact with the API v1's endpoints.
 #[must_use]
 pub struct Client {
   http: reqwest::Client,
   token: String,
-  id: u64,
 }
 
 impl Client {
@@ -46,12 +46,11 @@ impl Client {
   /// let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
   /// ```
   pub fn new(token: String) -> Self {
-    let id = util::parse_api_token(&token);
+    util::validate_api_token(&token);
 
     Self {
       http: reqwest::Client::new(),
       token: format!("Bearer {token}"),
-      id,
     }
   }
 
@@ -115,7 +114,7 @@ impl Client {
     }
   }
 
-  /// Gets your project's information.
+  /// Tries to get your project's information.
   ///
   /// # Panics
   ///
@@ -138,7 +137,7 @@ impl Client {
     self.send(Method::GET, api!("/projects/@me"), None).await
   }
 
-  /// Updates the application commands list in your Discord bot's Top.gg page.
+  /// Tries to update the application commands list in your Discord bot's Top.gg page.
   ///
   /// # Panics
   ///
@@ -147,8 +146,8 @@ impl Client {
   /// # Errors
   ///
   /// Returns [`Err`] if:
-  /// - Unable to retrieve the list of bot commands. ([`PostBotCommandsError::Retrieval`][super::PostBotCommandsError::Retrieval])
-  /// - Unable to serialize the list of bot commands. ([`PostBotCommandsError::Serialization`][super::PostBotCommandsError::Serialization])
+  /// - Unable to retrieve the list of bot commands. ([`PostCommandsError::Retrieval`][super::PostCommandsError::Retrieval])
+  /// - Unable to serialize the list of bot commands. ([`PostCommandsError::Serialization`][super::PostCommandsError::Serialization])
   /// - The list of bot commands supplied do not match [Discord API's raw JSON format](https://discord.com/developers/docs/interactions/application-commands#application-command-object). ([`Error::InvalidRequest`][super::Error::InvalidRequest])
   /// - HTTP request failure from the client-side. ([`Error::InternalClientError`][super::Error::InternalClientError])
   /// - HTTP request failure from the server-side. ([`Error::InternalServerError`][super::Error::InternalServerError])
@@ -167,11 +166,20 @@ impl Client {
   /// client.post_commands(interaction.global_commands()).await.unwrap();
   ///
   /// // Others:
-  /// let commands = vec![...]; // Array of application commands that
-  ///                           // can be serialized to Discord API's raw JSON format.
+  /// let commands = json!([{
+  ///   "id": "1",
+  ///   "type": 1,
+  ///   "application_id": "1",
+  ///   "name": "test",
+  ///   "description": "command description",
+  ///   "default_member_permissions": "",
+  ///   "version": "1"
+  /// }]); // Array of application commands that
+  ///      // can be serialized to Discord API's raw JSON format.
+  ///
   /// client.post_commands(commands).await.unwrap();
   /// ```
-  pub async fn post_commands<L, C, E>(&self, context: C) -> PostBotCommandsResult<(), E>
+  pub async fn post_commands<L, C, E>(&self, context: C) -> PostCommandsResult<(), E>
   where
     L: Serialize + DeserializeOwned,
     C: GetCommands<L, E>,
@@ -179,23 +187,23 @@ impl Client {
     let commands = context
       .get_commands()
       .await
-      .map_err(PostBotCommandsError::Retrieval)?;
+      .map_err(PostCommandsError::Retrieval)?;
 
     match self
       .send_inner(
         Method::POST,
         api!("/projects/@me/commands"),
-        serde_json::to_vec(&commands).map_err(PostBotCommandsError::Serialization)?,
+        serde_json::to_vec(&commands).map_err(PostCommandsError::Serialization)?,
       )
       .await
     {
       Ok(_) => Ok(()),
 
-      Err(err) => Err(PostBotCommandsError::Request(err)),
+      Err(err) => Err(PostCommandsError::Request(err)),
     }
   }
 
-  /// Gets the latest vote information of a user on your project. Returns [`None`] if the user has not voted.
+  /// Tries to get the latest vote information of a user on your project. Returns [`None`] if the user has not voted.
   ///
   /// # Panics
   ///
@@ -222,7 +230,7 @@ impl Client {
   /// // Top.gg ID:
   /// let vote = client.get_vote(UserSource::Topgg(8226924471638491136)).await.unwrap();
   /// ```
-  pub async fn get_vote<S>(&self, user: UserSource<S>) -> Result<Option<Vote>>
+  pub async fn get_vote<S>(&self, user: UserSource<S>) -> Result<Option<PartialVote>>
   where
     S: Snowflake,
   {
@@ -248,5 +256,63 @@ impl Client {
         Err(err)
       }
     }
+  }
+
+  /// Tries to get a cursor-based paginated list of votes for your project, ordered by creation date.
+  ///
+  /// # Panics
+  ///
+  /// Panics if the client uses an invalid API token.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`Err`] if:
+  /// - HTTP request failure from the client-side. ([`InternalClientError`][super::Error::InternalClientError])
+  /// - HTTP request failure from the server-side. ([`InternalServerError`][super::Error::InternalServerError])
+  /// - Ratelimited from sending more requests. ([`Ratelimit`][super::Error::Ratelimit])
+  ///
+  /// # Example
+  ///
+  /// ```rust,no_run
+  /// use chrono::{TimeZone, Utc};
+  ///
+  /// let since = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).single().unwrap();
+  /// let first_page = client.get_votes(since).await.unwrap();
+  ///
+  /// for vote in first_page.iter() {
+  ///   println!("{vote:?}");
+  /// }
+  ///
+  /// let second_page = first_page.next().await.unwrap();
+  ///
+  /// for vote in second_page.iter() {
+  ///   println!("{vote:?}");
+  /// }
+  /// ```
+  pub async fn get_votes<Tz>(&self, since: DateTime<Tz>) -> Result<PaginatedVotes<'_>>
+  where
+    Tz: TimeZone,
+  {
+    self
+      .send(
+        Method::GET,
+        api!(
+          "/projects/@me/votes?startDate={}",
+          urlencoding::encode(&since.to_rfc3339_opts(SecondsFormat::Millis, true))
+        ),
+        None,
+      )
+      .await
+      .map(|data| PaginatedVotes { data, client: self })
+  }
+
+  pub(super) async fn get_next_votes(&self, cursor: &str) -> Result<PaginatedVotesOwned> {
+    self
+      .send(
+        Method::GET,
+        api!("/projects/@me/votes?cursor={}", cursor),
+        None,
+      )
+      .await
   }
 }

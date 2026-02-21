@@ -3,27 +3,27 @@
 #![cfg_attr(feature = "webhooks", allow(unreachable_patterns))]
 #![allow(clippy::needless_pass_by_value)]
 
+mod project;
 mod snowflake;
 #[cfg(test)]
 mod test;
+mod user;
+
+pub use project::*;
+pub use user::*;
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "api")] {
-    pub(crate) mod client;
+    mod client;
     mod error;
-    mod project;
-    mod user;
     mod util;
 
     pub use client::Client;
-    pub use error::{Error, PostBotCommandsError, PostBotCommandsResult, Result};
-    pub use project::{GetCommands, Project, ProjectType, Platform};
+    pub use error::{Error, PostCommandsError, PostCommandsResult, Result};
     pub use snowflake::Snowflake; // for doc purposes
-    pub use user::{UserSource, Vote};
 
-    #[doc(hidden)]
-    #[cfg(any(feature = "twilight", feature = "twilight-cached"))]
-    pub use project::TwilightGetCommandsError;
+    /// Widget generator functions.
+    pub mod widget;
   }
 }
 

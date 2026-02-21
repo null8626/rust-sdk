@@ -2,6 +2,7 @@
 name = "topgg"
 version = "2.0.0"
 edition = "2024"
+rust-version = "1.87"
 authors = ["null (https://github.com/null8626)", "Top.gg <support@top.gg> (https://top.gg)"]
 description = "A simple API wrapper for Top.gg written in Rust."
 readme = "README.md"
@@ -14,19 +15,22 @@ exclude = [".gitattributes", ".github/", ".gitignore", "rustfmt.toml"]
 [dependencies]
 base64 = { version = "0.22", optional = true }
 cfg-if = "1"
-paste = { version = "1", optional = true }
 reqwest = { version = "0.12", optional = true }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt", "sync", "time"], optional = true }
-urlencoding = "2"
+urlencoding = { version = "2", optional = true }
+bytes = { version = "1.11", optional = true }
+hex = { version = "0.4", optional = true }
+sha2 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+futures-core = { version = "0.3", optional = true }
 
 serenity = { version = "0.12", features = ["builder", "client", "gateway", "model", "utils"], optional = true }
 
 twilight-http = { version = "0.15", optional = true }
 twilight-model = { version = "0.15", optional = true }
-twilight-cache-inmemory = { version = "0.15", optional = true }
 
-chrono = { version = "0.4", default-features = false, optional = true, features = ["serde", "now"] }
+chrono = { version = "0.4", default-features = false, features = ["serde", "now"] }
 serde_json = { version = "1", optional = true }
 
 rocket = { version = "0.5", default-features = false, features = ["json"], optional = true }
@@ -46,19 +50,16 @@ rustc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["api"]
-api = ["async-trait", "base64", "chrono", "reqwest", "serde_json"]
+api = ["async-trait", "base64", "reqwest", "serde_json", "urlencoding"]
 
-serenity = ["dep:serenity", "paste"]
-serenity-cached = ["serenity", "serenity/cache"]
-
-twilight = ["twilight-model", "twilight-http"]
-twilight-cached = ["twilight", "twilight-cache-inmemory"]
+serenity = ["dep:serenity"]
+twilight = ["twilight-http", "twilight-model"]
 
 webhooks = []
-rocket = ["webhooks", "dep:rocket"]
-axum = ["webhooks", "async-trait", "serde_json", "dep:axum"]
-warp = ["webhooks", "async-trait", "dep:warp"]
-actix-web = ["webhooks", "dep:actix-web"]
+rocket = ["webhooks", "hex", "hmac", "serde_json", "sha2", "dep:rocket"]
+axum = ["webhooks", "async-trait", "hex", "hmac", "serde_json", "sha2", "dep:axum"]
+warp = ["webhooks", "bytes", "hex", "hmac", "serde_json", "sha2", "dep:warp"]
+actix-web = ["webhooks", "futures-core", "hex", "hmac", "serde_json", "sha2", "dep:actix-web"]
 
 [lints.rust]
 unsafe_code = "forbid"
