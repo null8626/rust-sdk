@@ -26,7 +26,7 @@ struct Ratelimit {
   retry_after: u16,
 }
 
-/// Interact with the API v1's endpoints.
+/// Interact with API v1's endpoints.
 #[must_use]
 pub struct Client {
   http: reqwest::Client,
