@@ -9,7 +9,7 @@ use serde::Deserialize;
 #[serde(tag = "type", content = "data")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webhooks")))]
 pub enum Payload {
-  /// A `integration.create` webhook payload. Fires when a user has connected to your webhook integration.
+  /// An `integration.create` webhook payload. Fires when a user has connected to your webhook integration.
   #[serde(rename = "integration.create")]
   IntegrationCreate {
     /// The unique identifier for this connection.
@@ -27,7 +27,7 @@ pub enum Payload {
     user: User,
   },
 
-  /// A `integration.delete` webhook payload. Fires when a user has disconnected from your webhook integration.
+  /// An `integration.delete` webhook payload. Fires when a user has disconnected from your webhook integration.
   #[serde(rename = "integration.delete")]
   IntegrationDelete {
     /// The unique identifier for this connection.
