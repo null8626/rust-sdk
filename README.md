@@ -1,20 +1,33 @@
-# [topgg](https://crates.io/crates/topgg) [![crates.io][crates-io-image]][crates-io-url] [![crates.io downloads][crates-io-downloads-image]][crates-io-url]
+# [Top.gg Rust SDK](https://crates.io/crates/topgg) [![crates.io][crates-io-image]][crates-io-url] [![crates.io downloads][crates-io-downloads-image]][crates-io-url]
 
 [crates-io-image]: https://img.shields.io/crates/v/topgg?style=flat-square
 [crates-io-downloads-image]: https://img.shields.io/crates/d/topgg?style=flat-square
 [crates-io-url]: https://crates.io/crates/topgg
 
-The official Rust SDK for the [Top.gg API](https://docs.top.gg).
+> For more information, see the documentation here: https://docs.rs/topgg.
 
-## Getting Started
+The community-maintained Rust library for Top.gg.
 
-Make sure to have a [Top.gg API](https://docs.top.gg) token handy. If not, then [view this tutorial on how to retrieve yours](https://github.com/top-gg/rust-sdk/assets/60427892/d2df5bd3-bc48-464c-b878-a04121727bff). After that, add the following line to the `dependencies` section of your `Cargo.toml`:
+## Chapters
+
+- [Installation](#installation)
+- [Features](#features)
+- [Setting up](#setting-up)
+- [Usage](#usage)
+  - [Getting your project's information](#getting-your-projects-information)
+  - [Getting your project's vote information of a user](#getting-your-projects-vote-information-of-a-user)
+  - [Getting a cursor-based paginated list of votes for your project](#getting-a-cursor-based-paginated-list-of-votes-for-your-project)
+  - [Posting your bot's application commands list](#posting-your-bots-application-commands-list)
+  - [Generating widget URLs](#generating-widget-urls)
+  - [Webhooks](#webhooks)
+
+## Installation
+
+Add the following line to the `dependencies` section of your `Cargo.toml`:
 
 ```toml
 topgg = "2"
 ```
-
-For more information, please read [the documentation](https://docs.rs/topgg)!
 
 ## Features
 
@@ -29,7 +42,13 @@ This library provides several feature flags that can be enabled/disabled in `Car
 - **`serenity`**: Extra helpers for working with [serenity](https://crates.io/crates/serenity).
 - **`twilight`**: Extra helpers for working with [twilight](https://twilight.rs).
 
-## Examples
+## Setting up
+
+```rust,no_run
+let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
+```
+
+## Usage
 
 ### Getting your project's information
 
