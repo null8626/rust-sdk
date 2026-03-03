@@ -36,18 +36,12 @@ pub struct Client {
 impl Client {
   /// Creates a new instance.
   ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
-  ///
   /// # Example
   ///
   /// ```rust,no_run
   /// let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
   /// ```
   pub fn new(token: String) -> Self {
-    util::validate_api_token(&token);
-
     Self {
       http: reqwest::Client::new(),
       token: format!("Bearer {token}"),

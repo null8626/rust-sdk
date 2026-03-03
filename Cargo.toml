@@ -13,7 +13,6 @@ categories = ["api-bindings", "web-programming::http-client"]
 exclude = [".gitattributes", ".github/", ".gitignore", "rustfmt.toml"]
 
 [dependencies]
-base64 = { version = "0.22", optional = true }
 cfg-if = "1"
 reqwest = { version = "0.12", optional = true }
 serde = { version = "1", features = ["derive"] }
@@ -50,7 +49,7 @@ rustc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["api"]
-api = ["async-trait", "base64", "reqwest", "serde_json", "urlencoding"]
+api = ["async-trait", "reqwest", "serde_json", "urlencoding"]
 
 serenity = ["dep:serenity"]
 twilight = ["twilight-http", "twilight-model"]
