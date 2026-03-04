@@ -56,7 +56,8 @@ pub enum Payload {
     weight: u64,
 
     /// When the vote was cast.
-    created_at: DateTime<Utc>,
+    #[serde(rename = "created_at")]
+    voted_at: DateTime<Utc>,
 
     /// When the vote expires and the user is required to vote again.
     expires_at: DateTime<Utc>,
