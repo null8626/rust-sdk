@@ -1,10 +1,10 @@
 use super::Webhook;
 use axum::{
-  Router,
   extract::State,
   http::{HeaderMap, StatusCode},
   response::IntoResponse,
   routing::post,
+  Router,
 };
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
