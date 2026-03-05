@@ -42,8 +42,8 @@ cfg_if::cfg_if! {
     #[cfg_attr(docsrs, doc(cfg(feature = "api")))]
     pub struct Vote {
       /// The voter's ID.
-      #[serde(deserialize_with = "snowflake::deserialize")]
-      pub user_id: u64,
+      #[serde(deserialize_with = "snowflake::deserialize", rename = "user_id")]
+      pub voter_id: u64,
 
       /// The voter's ID on the project's platform.
       #[serde(deserialize_with = "snowflake::deserialize")]
