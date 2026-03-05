@@ -34,7 +34,7 @@ topgg = "2"
 This library provides several feature flags that can be enabled/disabled in `Cargo.toml`, such as:
 
 - **`api`**: Interacting with the [Top.gg API](https://docs.top.gg) and accessing the `top.gg/api/*` endpoints. (enabled by default)
-- **`webhook`**: Accessing the [serde deserializable](https://docs.rs/serde/latest/serde/de/trait.DeserializeOwned.html) `topgg::Payload` struct.
+- **`webhooks`**: Accessing [serde deserializable](https://docs.rs/serde/latest/serde/de/trait.DeserializeOwned.html) webhook payload structs.
   - **`actix-web`**: Wrapper for working with the [actix-web](https://actix.rs/) web framework.
   - **`axum`**: Wrapper for working with the [axum](https://crates.io/crates/axum) web framework.
   - **`rocket`**: Wrapper for working with the [rocket](https://rocket.rs/) web framework.
