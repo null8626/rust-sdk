@@ -90,7 +90,7 @@ cfg_if::cfg_if! {
       pub total_votes: u64,
 
       /// The project's review score out of 5.
-      pub review_score: f64,
+      pub review_score: f32,
 
       /// The project's total review count.
       pub review_count: u64,
