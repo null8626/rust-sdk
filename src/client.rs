@@ -34,7 +34,7 @@ pub struct Client {
 }
 
 impl Client {
-  /// Creates a new instance.
+  /// Creates a new client instance.
   ///
   /// # Panics
   ///
