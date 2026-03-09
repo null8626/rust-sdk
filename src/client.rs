@@ -38,7 +38,7 @@ impl Client {
   ///
   /// # Panics
   ///
-  /// Panics if the client uses an invalid API token.
+  /// Panics if the specified API token is invalid.
   ///
   /// # Example
   ///
