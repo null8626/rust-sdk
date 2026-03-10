@@ -6,7 +6,7 @@
 
 > For more information, see the documentation here: <https://docs.rs/topgg>.
 
-The community-maintained Rust library for Top.gg.
+The community-maintained Rust SDK for Top.gg.
 
 ## Chapters
 
