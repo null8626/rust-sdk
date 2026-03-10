@@ -1,6 +1,6 @@
 use crate::{ProjectType, Snowflake};
 
-/// Generate a large widget URL.
+/// Generates a large widget URL.
 ///
 /// # Example
 ///
@@ -18,7 +18,7 @@ where
   )
 }
 
-/// Generate a small widget URL for displaying votes.
+/// Generates a small widget URL for displaying votes.
 ///
 /// # Example
 ///
@@ -36,7 +36,7 @@ where
   )
 }
 
-/// Generate a small widget URL for displaying a project's owner.
+/// Generates a small widget URL for displaying a project's owner.
 ///
 /// # Example
 ///
@@ -54,7 +54,7 @@ where
   )
 }
 
-/// Generate a small widget URL for displaying social stats.
+/// Generates a small widget URL for displaying social stats.
 ///
 /// # Example
 ///
