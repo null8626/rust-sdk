@@ -273,7 +273,7 @@ fn webhook(payload: IncomingPayload) -> Status {
     Some(payload) => {
       println!("{payload:?}");
 
-      Status::Ok
+      Status::NoContent
     },
     _ => {
       println!("found an unauthorized attacker.");
