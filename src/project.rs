@@ -32,7 +32,7 @@ impl ProjectType {
   }
 }
 
-/// A brief information on project listed on Top.gg.
+/// A brief information on a project listed on Top.gg.
 #[cfg(feature = "webhooks")]
 #[derive(Clone, Debug, Deserialize)]
 #[cfg_attr(docsrs, doc(cfg(feature = "webhooks")))]
