@@ -4,7 +4,7 @@
 [crates-io-downloads-image]: https://img.shields.io/crates/d/topgg?style=flat-square
 [crates-io-url]: https://crates.io/crates/topgg
 
-> For more information, see the documentation here: https://docs.rs/topgg.
+> For more information, see the documentation here: <https://docs.rs/topgg>.
 
 The community-maintained Rust library for Top.gg.
 
