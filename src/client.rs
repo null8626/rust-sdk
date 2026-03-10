@@ -26,7 +26,7 @@ struct Ratelimit {
   retry_after: u16,
 }
 
-/// Interact with API v1's endpoints.
+/// Interact with Top.gg API v1's endpoints.
 #[must_use]
 pub struct Client {
   http: reqwest::Client,
@@ -34,7 +34,7 @@ pub struct Client {
 }
 
 impl Client {
-  /// Creates a new instance.
+  /// Creates a new client instance.
   ///
   /// # Example
   ///
