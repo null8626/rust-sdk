@@ -1,5 +1,6 @@
 use super::IncomingPayload;
 
+use log::warn;
 use rocket::{
   data::{Data, FromData, Outcome, ToByteUnit},
   http::Status,
@@ -18,10 +19,14 @@ impl<'r> FromData<'r> for IncomingPayload {
       headers.get_one("x-topgg-signature"),
       headers.get_one("x-topgg-trace"),
     ) {
-      if let Ok(body) = data.open(2.mebibytes()).into_bytes().await
-        && let Some(output) = Self::new(signature, body.into_inner(), trace)
-      {
-        return Outcome::Success(output);
+      if let Ok(body) = data.open(2.mebibytes()).into_bytes().await {
+        return Self::new(signature, body.into_inner(), trace).map_or_else(|| {
+          warn!(
+            "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers."
+          );
+
+          Outcome::Error((Status::NoContent, ()))
+        }, Outcome::Success);
       }
 
       return Outcome::Error((Status::BadRequest, ()));

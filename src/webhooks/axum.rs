@@ -8,6 +8,7 @@ use axum::{
   response::{IntoResponse, Response},
   routing::post,
 };
+use log::warn;
 
 /// An axum webhook listener for listening to payloads.
 ///
@@ -99,9 +100,16 @@ where
             && let Ok(signature) = signature.to_str()
             && let Some(trace) = headers.get("x-topgg-trace")
             && let Ok(trace) = trace.to_str()
-            && let Some(payload) = Payload::new(signature, &body, &wrapped_state.secret)
           {
-            wrapped_state.state.callback(payload, trace).await
+            if let Some(payload) = Payload::new(signature, &body, &wrapped_state.secret) {
+              wrapped_state.state.callback(payload, trace).await
+            } else {
+              warn!(
+                "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers.\n--- BEGIN BODY DUMP ---\n{body}\n--- END BODY DUMP ---"
+              );
+
+              (StatusCode::NO_CONTENT, ()).into_response()
+            }
           } else {
             (StatusCode::UNAUTHORIZED, ()).into_response()
           }
