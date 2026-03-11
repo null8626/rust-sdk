@@ -46,6 +46,7 @@ pub fn webhook(
   warp::post()
     .and(path(endpoint))
     .and(header("x-topgg-signature"))
+    .and(body::content_length_limit(2 * 1024 * 1024))
     .and(body::bytes())
     .map(move |signature: String, body: Bytes| {
       str::from_utf8(&body)
