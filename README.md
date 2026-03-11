@@ -128,25 +128,25 @@ client.post_commands(commands).await.unwrap();
 #### Large
 
 ```rust,no_run
-let widget_url = topgg::widget::large(topgg::ProjectType::DiscordBot, 574652751745777665);
+let widget_url = topgg::widget::large(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
 ```
 
 #### Votes
 
 ```rust,no_run
-let widget_url = topgg::widget::votes(topgg::ProjectType::DiscordBot, 574652751745777665);
+let widget_url = topgg::widget::votes(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
 ```
 
 #### Owner
 
 ```rust,no_run
-let widget_url = topgg::widget::owner(topgg::ProjectType::DiscordBot, 574652751745777665);
+let widget_url = topgg::widget::owner(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
 ```
 
 #### Social
 
 ```rust,no_run
-let widget_url = topgg::widget::social(topgg::ProjectType::DiscordBot, 574652751745777665);
+let widget_url = topgg::widget::social(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
 ```
 
 ### Webhooks

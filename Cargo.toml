@@ -31,6 +31,7 @@ twilight-model = { version = "0.15", optional = true }
 
 chrono = { version = "0.4", default-features = false, features = ["serde", "now"] }
 serde_json = { version = "1", optional = true }
+serde_variant = { version = "0.1", optional = true }
 log = { version = "0.4", optional = true }
 
 rocket = { version = "0.5", default-features = false, features = ["json"], optional = true }
@@ -50,7 +51,7 @@ rustc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["api"]
-api = ["async-trait", "reqwest", "serde_json", "urlencoding"]
+api = ["async-trait", "reqwest", "serde_json", "serde_variant", "urlencoding"]
 
 serenity = ["dep:serenity"]
 twilight = ["twilight-http", "twilight-model"]

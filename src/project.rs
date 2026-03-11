@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 /// A project's platform.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
   Discord,
@@ -12,24 +12,11 @@ pub enum Platform {
 
 /// A project's type.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ProjectType {
-  #[serde(rename = "bot")]
-  DiscordBot,
-
-  #[serde(rename = "server")]
-  DiscordServer,
-}
-
-impl ProjectType {
-  #[cfg(feature = "api")]
-  pub(super) const fn as_widget_path(self) -> &'static str {
-    match self {
-      Self::DiscordBot => "discord/bot",
-
-      Self::DiscordServer => "discord/server",
-    }
-  }
+  Bot,
+  Server,
 }
 
 /// A brief information on a project listed on Top.gg.
