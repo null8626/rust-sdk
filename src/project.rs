@@ -28,7 +28,7 @@ pub struct PartialProject {
   /// The project's ID.
   pub id: u64,
 
-  /// The project's ID.
+  /// The project's type.
   #[serde(rename = "type")]
   pub kind: ProjectType,
 
