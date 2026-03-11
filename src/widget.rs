@@ -5,7 +5,7 @@ use crate::{Platform, ProjectType, Snowflake};
 /// # Example
 ///
 /// ```rust,no_run
-/// let widget_url = topgg::widget::large(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
+/// let widget_url = topgg::widget::large(topgg::Platform::Discord, topgg::ProjectType::Bot, 1026525568344264724);
 /// ```
 #[allow(clippy::missing_panics_doc)]
 pub fn large<I>(platform: Platform, project_type: ProjectType, id: I) -> String
@@ -25,7 +25,7 @@ where
 /// # Example
 ///
 /// ```rust,no_run
-/// let widget_url = topgg::widget::votes(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
+/// let widget_url = topgg::widget::votes(topgg::Platform::Discord, topgg::ProjectType::Bot, 1026525568344264724);
 /// ```
 #[allow(clippy::missing_panics_doc)]
 pub fn votes<I>(platform: Platform, project_type: ProjectType, id: I) -> String
@@ -45,7 +45,7 @@ where
 /// # Example
 ///
 /// ```rust,no_run
-/// let widget_url = topgg::widget::owner(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
+/// let widget_url = topgg::widget::owner(topgg::Platform::Discord, topgg::ProjectType::Bot, 1026525568344264724);
 /// ```
 #[allow(clippy::missing_panics_doc)]
 pub fn owner<I>(platform: Platform, project_type: ProjectType, id: I) -> String
@@ -65,7 +65,7 @@ where
 /// # Example
 ///
 /// ```rust,no_run
-/// let widget_url = topgg::widget::social(topgg::Platform::Discord, topgg::ProjectType::Bot, 574652751745777665);
+/// let widget_url = topgg::widget::social(topgg::Platform::Discord, topgg::ProjectType::Bot, 1026525568344264724);
 /// ```
 #[allow(clippy::missing_panics_doc)]
 pub fn social<I>(platform: Platform, project_type: ProjectType, id: I) -> String
