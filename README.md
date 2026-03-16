@@ -31,7 +31,7 @@ topgg = "2"
 
 ## Features
 
-This library provides several feature flags that can be enabled/disabled in `Cargo.toml`, such as:
+This SDK provides several feature flags that can be enabled/disabled in `Cargo.toml`, such as:
 
 - **`api`**: Interacting with the [Top.gg API](https://docs.top.gg) and accessing the `top.gg/api/*` endpoints. (enabled by default)
 - **`webhooks`**: Accessing [serde deserializable](https://docs.rs/serde/latest/serde/de/trait.DeserializeOwned.html) webhook payload structs.
