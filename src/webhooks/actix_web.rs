@@ -4,6 +4,7 @@ use std::{
   future::Future,
   pin::Pin,
   task::{Context, Poll, ready},
+  time::{Duration, Instant},
 };
 
 use actix_web::{
@@ -18,6 +19,7 @@ use log::warn;
 pub enum IncomingPayloadError {
   ParseFailure,
   Unauthorized,
+  Timeout,
 }
 
 impl Display for IncomingPayloadError {
@@ -26,6 +28,8 @@ impl Display for IncomingPayloadError {
       Self::ParseFailure => "Unable to parse Top.gg webhook payload.",
 
       Self::Unauthorized => "Unauthorized.",
+
+      Self::Timeout => "Request timed out.",
     })
   }
 }
@@ -36,6 +40,8 @@ impl ResponseError for IncomingPayloadError {
       Self::ParseFailure => HttpResponse::NoContent().body(()),
 
       Self::Unauthorized => HttpResponse::Unauthorized().body("Unauthorized"),
+
+      Self::Timeout => HttpResponse::RequestTimeout().body("Request timed out"),
     }
   }
 
@@ -44,6 +50,8 @@ impl ResponseError for IncomingPayloadError {
       Self::ParseFailure => StatusCode::NO_CONTENT,
 
       Self::Unauthorized => StatusCode::UNAUTHORIZED,
+
+      Self::Timeout => StatusCode::REQUEST_TIMEOUT,
     }
   }
 }
@@ -53,13 +61,28 @@ pub struct IncomingPayloadFut {
   req: HttpRequest,
   payload: Payload,
   body: Vec<u8>,
+  start: Instant,
+}
+
+impl IncomingPayloadFut {
+  fn timed_out(&self) -> bool {
+    self.start.elapsed() > Duration::from_secs(5)
+  }
 }
 
 impl Future for IncomingPayloadFut {
   type Output = Result<IncomingPayload, IncomingPayloadError>;
 
   fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    if self.timed_out() {
+      return Poll::Ready(Err(IncomingPayloadError::Timeout));
+    }
+
     while let Some(body) = ready!(Pin::new(&mut self.payload).poll_next(cx)) {
+      if self.timed_out() {
+        return Poll::Ready(Err(IncomingPayloadError::Timeout));
+      }
+
       match body {
         Ok(body) => self.body.extend_from_slice(&body),
 
@@ -98,6 +121,7 @@ impl FromRequest for IncomingPayload {
       req: req.clone(),
       payload: payload.take(),
       body: vec![],
+      start: Instant::now(),
     }
   }
 }

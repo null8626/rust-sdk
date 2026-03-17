@@ -1,14 +1,16 @@
 use super::Payload;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use axum::{
-  Router,
-  extract::State,
+  BoxError, Router,
+  error_handling::HandleErrorLayer,
+  extract::{DefaultBodyLimit, State},
   http::{HeaderMap, StatusCode},
   response::{IntoResponse, Response},
   routing::post,
 };
 use log::warn;
+use tower::{ServiceBuilder, timeout::error::Elapsed};
 
 /// An axum webhook listener for listening to payloads.
 ///
@@ -91,6 +93,16 @@ pub fn webhook<S>(state: Arc<S>, secret: String) -> Router
 where
   S: Listener,
 {
+  let timeout_layer = ServiceBuilder::new()
+    .layer(HandleErrorLayer::new(|err: BoxError| async move {
+      if err.is::<Elapsed>() {
+        (StatusCode::REQUEST_TIMEOUT, "Request timed out")
+      } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
+      }
+    }))
+    .timeout(Duration::from_secs(5));
+
   Router::new()
     .route(
       "/",
@@ -111,11 +123,13 @@ where
               (StatusCode::NO_CONTENT, ()).into_response()
             }
           } else {
-            (StatusCode::UNAUTHORIZED, ()).into_response()
+            (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
           }
         },
       ),
     )
+    .layer(timeout_layer.into_inner())
+    .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
     .with_state(WebhookState {
       state,
       secret: Arc::new(secret),
