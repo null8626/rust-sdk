@@ -14,7 +14,7 @@ pub enum Error {
   /// Attempted to send an invalid request to the API.
   InvalidRequest,
 
-  /// Such query does not exist.
+  /// Such route does not exist.
   NotFound,
 
   /// Ratelimited from sending more requests.
