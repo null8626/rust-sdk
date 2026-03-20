@@ -1,6 +1,7 @@
 use super::Payload;
 
 use bytes::Bytes;
+use chrono::Utc;
 use warp::{Filter, Rejection, body, header, path};
 
 /// Creates a new warp [`Filter`] for receiving webhook events.
@@ -49,9 +50,11 @@ pub fn webhook(
     .and(body::content_length_limit(2 * 1024 * 1024))
     .and(body::bytes())
     .map(move |signature: String, body: Bytes| {
+      let now = Utc::now();
+
       str::from_utf8(&body)
         .ok()
-        .and_then(|body| Payload::new(&signature, body, &secret))
+        .and_then(|body| Payload::new(&now, &signature, body, &secret))
     })
     .and(header("x-topgg-trace"))
 }

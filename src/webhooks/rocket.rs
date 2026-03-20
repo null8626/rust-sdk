@@ -1,6 +1,7 @@
 use super::IncomingPayload;
 use std::time::Duration;
 
+use chrono::Utc;
 use log::warn;
 use rocket::{
   data::{Data, FromData, Outcome, ToByteUnit},
@@ -15,6 +16,7 @@ impl<'r> FromData<'r> for IncomingPayload {
   type Error = ();
 
   async fn from_data(request: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self> {
+    let now = Utc::now();
     let headers = request.headers();
 
     if let (Some(signature), Some(trace)) = (
@@ -23,7 +25,7 @@ impl<'r> FromData<'r> for IncomingPayload {
     ) {
       return match timeout(Duration::from_secs(5), data.open(2.mebibytes()).into_bytes()).await {
         Ok(Ok(body)) => {
-          Self::new(signature, body.into_inner(), trace).map_or_else(|| {
+          Self::new(&now, signature, body.into_inner(), trace).map_or_else(|| {
             warn!(
               "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers."
             );

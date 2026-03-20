@@ -9,6 +9,7 @@ use axum::{
   response::{IntoResponse, Response},
   routing::post,
 };
+use chrono::Utc;
 use log::warn;
 use tower::{ServiceBuilder, timeout::error::Elapsed};
 
@@ -108,12 +109,14 @@ where
       "/",
       post(
         async |headers: HeaderMap, State(wrapped_state): State<WebhookState<S>>, body: String| {
+          let now = Utc::now();
+
           if let Some(signature) = headers.get("x-topgg-signature")
             && let Ok(signature) = signature.to_str()
             && let Some(trace) = headers.get("x-topgg-trace")
             && let Ok(trace) = trace.to_str()
           {
-            if let Some(payload) = Payload::new(signature, &body, &wrapped_state.secret) {
+            if let Some(payload) = Payload::new(&now, signature, &body, &wrapped_state.secret) {
               wrapped_state.state.callback(payload, trace).await
             } else {
               warn!(

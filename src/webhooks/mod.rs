@@ -28,6 +28,7 @@ cfg_if::cfg_if! {
   if #[cfg(any(feature = "actix-web", feature = "rocket"))] {
     use std::collections::HashMap;
 
+    use chrono::{DateTime, Utc};
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
 
@@ -108,22 +109,27 @@ cfg_if::cfg_if! {
     /// ```
     #[cfg_attr(docsrs, doc(cfg(any(feature = "actix-web", feature = "rocket"))))]
     pub struct IncomingPayload {
-      t: String,
+      t: i64,
       signature: String,
       body: String,
       trace: String,
     }
 
     impl IncomingPayload {
-      pub(super) fn new(signature: &str, body: Vec<u8>, trace: &str) -> Option<Self> {
+      pub(super) fn new(now: &DateTime<Utc>, signature: &str, body: Vec<u8>, trace: &str) -> Option<Self> {
         let signature = signature.split(',').filter_map(|p| p.split_once('=')).collect::<HashMap<_, _>>();
+        let t = signature.get("t")?.to_string().parse::<i64>().ok()? * 1000;
 
-        Some(Self {
-          t: signature.get("t")?.to_string(),
-          signature: signature.get("v1")?.to_string(),
-          body: String::from_utf8(body).ok()?,
-          trace: trace.into(),
-        })
+        if (now.timestamp_millis() - (t * 1000)).abs() < 30000 {
+          None
+        } else {
+          Some(Self {
+            t,
+            signature: signature.get("v1")?.to_string(),
+            body: String::from_utf8(body).ok()?,
+            trace: trace.into(),
+          })
+        }
       }
 
       /// Tries to authenticate a valid secret with this request.

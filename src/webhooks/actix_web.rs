@@ -11,6 +11,7 @@ use actix_web::{
   FromRequest, HttpRequest, HttpResponse, ResponseError, body::BoxBody, dev::Payload,
   http::StatusCode,
 };
+use chrono::{DateTime, Utc};
 use futures_core::stream::Stream;
 use log::warn;
 
@@ -62,6 +63,7 @@ pub struct IncomingPayloadFut {
   payload: Payload,
   body: Vec<u8>,
   start: Instant,
+  now: DateTime<Utc>,
 }
 
 impl IncomingPayloadFut {
@@ -102,7 +104,7 @@ impl Future for IncomingPayloadFut {
       headers.get("x-topgg-signature"),
       headers.get("x-topgg-trace"),
     ) && let (Ok(signature), Ok(trace)) = (signature.to_str(), trace.to_str())
-      && let Some(incoming) = IncomingPayload::new(signature, self.body.clone(), trace)
+      && let Some(incoming) = IncomingPayload::new(&self.now, signature, self.body.clone(), trace)
     {
       return Poll::Ready(Ok(incoming));
     }
@@ -122,6 +124,7 @@ impl FromRequest for IncomingPayload {
       payload: payload.take(),
       body: vec![],
       start: Instant::now(),
+      now: Utc::now(),
     }
   }
 }

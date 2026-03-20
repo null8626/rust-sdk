@@ -72,7 +72,12 @@ pub enum Payload {
 
 impl Payload {
   #[cfg(any(feature = "axum", feature = "warp"))]
-  pub(super) fn new(signature: &str, body: &str, secret: &str) -> Option<Self> {
+  pub(super) fn new(
+    now: &DateTime<Utc>,
+    signature: &str,
+    body: &str,
+    secret: &str,
+  ) -> Option<Self> {
     use std::collections::HashMap;
 
     use hmac::{Hmac, Mac};
@@ -83,9 +88,16 @@ impl Payload {
       .filter_map(|p| p.split_once('='))
       .collect::<HashMap<_, _>>();
 
-    let (Some(t), Some(signature)) = (signature.get("t"), signature.get("v1")) else {
+    let (Some(Ok(t)), Some(signature)) = (
+      signature.get("t").map(|t| t.parse::<i64>()),
+      signature.get("v1"),
+    ) else {
       return None;
     };
+
+    if (now.timestamp_millis() - (t * 1000)).abs() < 30000 {
+      return None;
+    }
 
     let mut hmac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).ok()?;
 
