@@ -77,7 +77,9 @@ impl Client {
           Ok(response)
         } else {
           Err(match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => panic!("Invalid API token."),
+            StatusCode::UNAUTHORIZED => panic!("Invalid API token."),
+
+            StatusCode::FORBIDDEN => Error::Forbidden,
 
             StatusCode::NOT_FOUND => Error::NotFound,
 

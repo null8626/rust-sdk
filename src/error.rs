@@ -14,6 +14,9 @@ pub enum Error {
   /// Attempted to send an invalid request to the API.
   InvalidRequest,
 
+  /// You don't have access to this endpoint.
+  Forbidden,
+
   /// Such route does not exist.
   NotFound,
 
@@ -31,9 +34,11 @@ impl fmt::Display for Error {
 
       Self::InternalServerError => write!(f, "Internal Server Error"),
 
-      Self::InvalidRequest => write!(f, "Invalid Request"),
+      Self::InvalidRequest => write!(f, "Attempted to send an invalid request to the API"),
 
-      Self::NotFound => write!(f, "Not Found"),
+      Self::NotFound => write!(f, "Such route does not exist"),
+
+      Self::Forbidden => write!(f, "You don't have access to this endpoint"),
 
       Self::Ratelimit { retry_after } => write!(
         f,
