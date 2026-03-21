@@ -1,4 +1,4 @@
-use super::Payload;
+use super::{Payload, PayloadResult};
 
 use bytes::Bytes;
 use chrono::Utc;
@@ -9,27 +9,36 @@ use warp::{Filter, Rejection, body, header, path};
 /// # Example
 ///
 /// ```rust,no_run
+/// use topgg::PayloadResult;
 /// use std::net::SocketAddr;
 ///
-/// use warp::{http::StatusCode, reply, Filter};
+/// use warp::{Filter, http::StatusCode, reply};
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///   // POST /webhook
-///   let webhook = topgg::warp::webhook(
-///     "webhook",
-///     env!("TOPGG_WEBHOOK_SECRET").to_string()
-///   ).then(|payload, _trace| async move {
-///     match payload {
-///       Some(payload) => {
-///         println!("{payload:?}");
+///   let webhook =
+///     topgg::warp::webhook("webhook", env!("TOPGG_WEBHOOK_SECRET").into()).then(|payload, _trace| async move {
+///       match payload {
+///         PayloadResult::Accepted(payload) => {
+///           println!("{payload:?}");
 ///
-///         reply::with_status("", StatusCode::NO_CONTENT)
-///       },
+///           reply::with_status("", StatusCode::NO_CONTENT)
+///         }
 ///
-///       None => reply::with_status("Unauthorized", StatusCode::UNAUTHORIZED)
-///     }
-///   });
+///         PayloadResult::Forbidden => reply::with_status("Forbidden", StatusCode::FORBIDDEN),
+///
+///         PayloadResult::BadRequest => reply::with_status("Bad Request", StatusCode::BAD_REQUEST),
+///
+///         PayloadResult::Unauthorized => reply::with_status("Unauthorized", StatusCode::UNAUTHORIZED),
+///
+///         PayloadResult::DeserializationFailure => reply::with_status("", StatusCode::NO_CONTENT),
+///
+///         PayloadResult::InternalServerError => {
+///           reply::with_status("Internal Server Error", StatusCode::INTERNAL_SERVER_ERROR)
+///         }
+///       }
+///     });
 ///
 ///   let routes = warp::get().map(|| "Hello, World!").or(webhook);
 ///
@@ -43,7 +52,7 @@ use warp::{Filter, Rejection, body, header, path};
 pub fn webhook(
   endpoint: &'static str,
   secret: String,
-) -> impl Filter<Extract = (Option<Payload>, String), Error = Rejection> + Clone {
+) -> impl Filter<Extract = (PayloadResult, String), Error = Rejection> + Clone {
   warp::post()
     .and(path(endpoint))
     .and(header("x-topgg-signature"))
@@ -52,9 +61,9 @@ pub fn webhook(
     .map(move |signature: String, body: Bytes| {
       let now = Utc::now();
 
-      str::from_utf8(&body)
-        .ok()
-        .and_then(|body| Payload::new(&now, &signature, body, &secret))
+      String::from_utf8(body.to_vec()).map_or(PayloadResult::BadRequest, |body| {
+        Payload::new(now, body, &signature, &secret)
+      })
     })
     .and(header("x-topgg-trace"))
 }

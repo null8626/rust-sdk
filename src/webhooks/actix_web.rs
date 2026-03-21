@@ -13,22 +13,18 @@ use actix_web::{
 };
 use chrono::{DateTime, Utc};
 use futures_core::stream::Stream;
-use log::warn;
 
 #[doc(hidden)]
 #[derive(Debug)]
 pub enum IncomingPayloadError {
-  ParseFailure,
-  Unauthorized,
+  BadRequest,
   Timeout,
 }
 
 impl Display for IncomingPayloadError {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     f.write_str(match self {
-      Self::ParseFailure => "Unable to parse Top.gg webhook payload.",
-
-      Self::Unauthorized => "Unauthorized.",
+      Self::BadRequest => "Bad Request.",
 
       Self::Timeout => "Request timed out.",
     })
@@ -38,9 +34,7 @@ impl Display for IncomingPayloadError {
 impl ResponseError for IncomingPayloadError {
   fn error_response(&self) -> HttpResponse<BoxBody> {
     match self {
-      Self::ParseFailure => HttpResponse::NoContent().body(()),
-
-      Self::Unauthorized => HttpResponse::Unauthorized().body("Unauthorized"),
+      Self::BadRequest => HttpResponse::BadRequest().body("Bad Request"),
 
       Self::Timeout => HttpResponse::RequestTimeout().body("Request timed out"),
     }
@@ -48,9 +42,7 @@ impl ResponseError for IncomingPayloadError {
 
   fn status_code(&self) -> StatusCode {
     match self {
-      Self::ParseFailure => StatusCode::NO_CONTENT,
-
-      Self::Unauthorized => StatusCode::UNAUTHORIZED,
+      Self::BadRequest => StatusCode::BAD_REQUEST,
 
       Self::Timeout => StatusCode::REQUEST_TIMEOUT,
     }
@@ -85,16 +77,10 @@ impl Future for IncomingPayloadFut {
         return Poll::Ready(Err(IncomingPayloadError::Timeout));
       }
 
-      match body {
-        Ok(body) => self.body.extend_from_slice(&body),
-
-        Err(err) => {
-          warn!(
-            "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers: {err:?}"
-          );
-
-          return Poll::Ready(Err(IncomingPayloadError::ParseFailure));
-        }
+      if let Ok(body) = body {
+        self.body.extend_from_slice(&body);
+      } else {
+        return Poll::Ready(Err(IncomingPayloadError::BadRequest));
       }
     }
 
@@ -103,13 +89,16 @@ impl Future for IncomingPayloadFut {
     if let (Some(signature), Some(trace)) = (
       headers.get("x-topgg-signature"),
       headers.get("x-topgg-trace"),
-    ) && let (Ok(signature), Ok(trace)) = (signature.to_str(), trace.to_str())
-      && let Some(incoming) = IncomingPayload::new(&self.now, signature, self.body.clone(), trace)
+    ) && let (Ok(signature), Ok(trace), Ok(body)) = (
+      signature.to_str(),
+      trace.to_str(),
+      str::from_utf8(&self.body),
+    ) && let Some(incoming) = IncomingPayload::new(self.now, body.into(), signature, trace)
     {
       return Poll::Ready(Ok(incoming));
     }
 
-    Poll::Ready(Err(IncomingPayloadError::Unauthorized))
+    Poll::Ready(Err(IncomingPayloadError::BadRequest))
   }
 }
 

@@ -2,7 +2,6 @@ use super::IncomingPayload;
 use std::time::Duration;
 
 use chrono::Utc;
-use log::warn;
 use rocket::{
   data::{Data, FromData, Outcome, ToByteUnit},
   http::Status,
@@ -23,23 +22,26 @@ impl<'r> FromData<'r> for IncomingPayload {
       headers.get_one("x-topgg-signature"),
       headers.get_one("x-topgg-trace"),
     ) {
-      return match timeout(Duration::from_secs(5), data.open(2.mebibytes()).into_bytes()).await {
+      match timeout(
+        Duration::from_secs(5),
+        data.open(2.mebibytes()).into_bytes(),
+      )
+      .await
+      {
         Ok(Ok(body)) => {
-          Self::new(&now, signature, body.into_inner(), trace).map_or_else(|| {
-            warn!(
-              "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers."
-            );
+          if let Ok(body) = String::from_utf8(body.into_inner())
+            && let Some(payload) = Self::new(now, body, signature, trace)
+          {
+            return Outcome::Success(payload);
+          }
+        }
 
-            Outcome::Error((Status::NoContent, ()))
-          }, Outcome::Success)
-        },
+        Err(_) => return Outcome::Error((Status::RequestTimeout, ())),
 
-        Err(_) => Outcome::Error((Status::RequestTimeout, ())),
-
-        _ => Outcome::Error((Status::BadRequest, ())),
-      };
+        _ => {}
+      }
     }
 
-    Outcome::Error((Status::Unauthorized, ()))
+    Outcome::Error((Status::BadRequest, ()))
   }
 }

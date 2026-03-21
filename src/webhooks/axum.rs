@@ -1,4 +1,4 @@
-use super::Payload;
+use super::{Payload, PayloadResult};
 use std::{sync::Arc, time::Duration};
 
 use axum::{
@@ -10,7 +10,6 @@ use axum::{
   routing::post,
 };
 use chrono::Utc;
-use log::warn;
 use tower::{ServiceBuilder, timeout::error::Elapsed};
 
 /// An axum webhook listener for listening to payloads.
@@ -57,7 +56,12 @@ impl<T> Clone for WebhookState<T> {
 /// use topgg::Payload;
 /// use std::sync::Arc;
 ///
-/// use axum::{http::status::StatusCode, response::{IntoResponse, Response}, routing::get, Router};
+/// use axum::{
+///   Router,
+///   http::status::StatusCode,
+///   response::{IntoResponse, Response},
+///   routing::get,
+/// };
 /// use tokio::net::TcpListener;
 ///
 /// struct MyTopggListener {}
@@ -79,9 +83,10 @@ impl<T> Clone for WebhookState<T> {
 /// async fn main() {
 ///   let state = Arc::new(MyTopggListener {});
 ///
+///   // POST /webhook
 ///   let router = Router::new().route("/", get(index)).nest(
 ///     "/webhook",
-///     topgg::axum::webhook(Arc::clone(&state), env!("TOPGG_WEBHOOK_SECRET").to_string()),
+///     topgg::axum::webhook(Arc::clone(&state), env!("TOPGG_WEBHOOK_SECRET").into()),
 ///   );
 ///
 ///   let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
@@ -116,17 +121,27 @@ where
             && let Some(trace) = headers.get("x-topgg-trace")
             && let Ok(trace) = trace.to_str()
           {
-            if let Some(payload) = Payload::new(&now, signature, &body, &wrapped_state.secret) {
-              wrapped_state.state.callback(payload, trace).await
-            } else {
-              warn!(
-                "Unable to parse Top.gg webhook payload. Please report this bug to the SDK maintainers.\n--- BEGIN BODY DUMP ---\n{body}\n--- END BODY DUMP ---"
-              );
+            match Payload::new(now, body, signature, &wrapped_state.secret) {
+              PayloadResult::Accepted(payload) => {
+                wrapped_state.state.callback(payload, trace).await
+              }
 
-              (StatusCode::NO_CONTENT, ()).into_response()
+              PayloadResult::Forbidden => (StatusCode::FORBIDDEN, "Forbidden").into_response(),
+
+              PayloadResult::BadRequest => (StatusCode::BAD_REQUEST, "Bad Request").into_response(),
+
+              PayloadResult::Unauthorized => {
+                (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+              }
+
+              PayloadResult::DeserializationFailure => (StatusCode::NO_CONTENT, "").into_response(),
+
+              PayloadResult::InternalServerError => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
+              }
             }
           } else {
-            (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+            (StatusCode::BAD_REQUEST, "Bad Request").into_response()
           }
         },
       ),
