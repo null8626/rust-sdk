@@ -45,7 +45,7 @@ This SDK provides several feature flags that can be enabled/disabled in `Cargo.t
 ## Setting up
 
 ```rust,no_run
-let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
+let client = topgg::Client::new(env!("TOPGG_TOKEN").into());
 ```
 
 ## Usage
@@ -163,12 +163,13 @@ topgg = { version = "2", default-features = false, features = ["actix-web"] }
 In your code:
 
 ```rust,no_run
-use topgg::IncomingPayload;
+use topgg::{IncomingPayload, PayloadResult};
 use std::io;
 
 use actix_web::{
-  error::{Error, ErrorUnauthorized},
-  get, post, App, HttpServer,
+  App, HttpServer,
+  error::{Error, ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorUnauthorized},
+  get, post,
 };
 
 #[get("/")]
@@ -176,16 +177,25 @@ async fn index() -> &'static str {
   "Hello, World!"
 }
 
+// POST /webhook
 #[post("/webhook")]
 async fn webhook(payload: IncomingPayload) -> Result<&'static str, Error> {
   match payload.authenticate(env!("TOPGG_WEBHOOK_SECRET")) {
-    Some(payload) => {
+    PayloadResult::Accepted(payload) => {
       println!("{payload:?}");
 
       Ok("ok")
     }
 
-    _ => Err(ErrorUnauthorized("401")),
+    PayloadResult::Forbidden => Err(ErrorForbidden("Forbidden")),
+
+    PayloadResult::BadRequest => Err(ErrorBadRequest("Bad Request")),
+
+    PayloadResult::Unauthorized => Err(ErrorUnauthorized("Unauthorized")),
+
+    PayloadResult::DeserializationFailure => Ok(""),
+
+    PayloadResult::InternalServerError => Err(ErrorInternalServerError("Internal Server Error")),
   }
 }
 
@@ -213,7 +223,12 @@ In your code:
 use topgg::Payload;
 use std::sync::Arc;
 
-use axum::{http::status::StatusCode, response::{IntoResponse, Response}, routing::get, Router};
+use axum::{
+  Router,
+  http::status::StatusCode,
+  response::{IntoResponse, Response},
+  routing::get,
+};
 use tokio::net::TcpListener;
 
 struct MyTopggListener {}
@@ -235,9 +250,10 @@ async fn index() -> &'static str {
 async fn main() {
   let state = Arc::new(MyTopggListener {});
 
+  // POST /webhook
   let router = Router::new().route("/", get(index)).nest(
     "/webhook",
-    topgg::axum::webhook(Arc::clone(&state), env!("TOPGG_WEBHOOK_SECRET").to_string()),
+    topgg::axum::webhook(Arc::clone(&state), env!("TOPGG_WEBHOOK_SECRET").into()),
   );
 
   let listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
@@ -258,28 +274,34 @@ topgg = { version = "2", default-features = false, features = ["rocket"] }
 In your code:
 
 ```rust,no_run
-use topgg::IncomingPayload;
+use topgg::{IncomingPayload, PayloadResult};
 
-use rocket::{get, http::Status, launch, post, routes, Build, Rocket};
+use rocket::{Build, Rocket, get, http::Status, launch, post, routes};
 
 #[get("/")]
 fn index() -> &'static str {
   "Hello, World!"
 }
 
+// POST /webhook
 #[post("/webhook", data = "<payload>")]
 fn webhook(payload: IncomingPayload) -> Status {
   match payload.authenticate(env!("TOPGG_WEBHOOK_SECRET")) {
-    Some(payload) => {
+    PayloadResult::Accepted(payload) => {
       println!("{payload:?}");
 
       Status::NoContent
-    },
-    _ => {
-      println!("found an unauthorized attacker.");
-
-      Status::Unauthorized
     }
+
+    PayloadResult::Forbidden => Status::Forbidden,
+
+    PayloadResult::BadRequest => Status::BadRequest,
+
+    PayloadResult::Unauthorized => Status::Unauthorized,
+
+    PayloadResult::DeserializationFailure => Status::NoContent,
+
+    PayloadResult::InternalServerError => Status::InternalServerError,
   }
 }
 
@@ -301,27 +323,36 @@ topgg = { version = "2", default-features = false, features = ["warp"] }
 In your code:
 
 ```rust,no_run
+use topgg::PayloadResult;
 use std::net::SocketAddr;
 
-use warp::{http::StatusCode, reply, Filter};
+use warp::{Filter, http::StatusCode, reply};
 
 #[tokio::main]
 async fn main() {
   // POST /webhook
-  let webhook = topgg::warp::webhook(
-    "webhook",
-    env!("TOPGG_WEBHOOK_SECRET").to_string()
-  ).then(|payload, _trace| async move {
-    match payload {
-      Some(payload) => {
-        println!("{payload:?}");
+  let webhook =
+    topgg::warp::webhook("webhook", env!("TOPGG_WEBHOOK_SECRET").into()).then(|payload, _trace| async move {
+      match payload {
+        PayloadResult::Accepted(payload) => {
+          println!("{payload:?}");
 
-        reply::with_status("", StatusCode::NO_CONTENT)
-      },
+          reply::with_status("", StatusCode::NO_CONTENT)
+        }
 
-      None => reply::with_status("Unauthorized", StatusCode::UNAUTHORIZED)
-    }
-  });
+        PayloadResult::Forbidden => reply::with_status("Forbidden", StatusCode::FORBIDDEN),
+
+        PayloadResult::BadRequest => reply::with_status("Bad Request", StatusCode::BAD_REQUEST),
+
+        PayloadResult::Unauthorized => reply::with_status("Unauthorized", StatusCode::UNAUTHORIZED),
+
+        PayloadResult::DeserializationFailure => reply::with_status("", StatusCode::NO_CONTENT),
+
+        PayloadResult::InternalServerError => {
+          reply::with_status("Internal Server Error", StatusCode::INTERNAL_SERVER_ERROR)
+        }
+      }
+    });
 
   let routes = warp::get().map(|| "Hello, World!").or(webhook);
 
