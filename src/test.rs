@@ -13,7 +13,7 @@ macro_rules! delayed {
 #[tokio::test]
 #[allow(clippy::unreadable_literal)]
 async fn api() {
-  let client = Client::new(env!("TOPGG_TOKEN").to_string());
+  let client = Client::new(env!("TOPGG_TOKEN").into());
 
   delayed! {
     let _project = client.get_self().await.unwrap();

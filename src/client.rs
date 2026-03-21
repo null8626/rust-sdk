@@ -39,7 +39,7 @@ impl Client {
   /// # Example
   ///
   /// ```rust,no_run
-  /// let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
+  /// let client = topgg::Client::new(env!("TOPGG_TOKEN").into());
   /// ```
   pub fn new(token: String) -> Self {
     Self {

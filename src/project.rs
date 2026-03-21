@@ -1,6 +1,6 @@
 use super::snowflake;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// A project's platform.
 #[non_exhaustive]
@@ -42,7 +42,7 @@ pub struct PartialProject {
 
 cfg_if::cfg_if! {
   if #[cfg(feature = "api")] {
-    use serde::{Serialize, de::DeserializeOwned, ser::Error};
+    use serde::{de::DeserializeOwned, ser::Error};
 
     /// A project listed on Top.gg.
     #[derive(Clone, Debug, Deserialize)]
