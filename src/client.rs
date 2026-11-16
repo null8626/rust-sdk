@@ -191,6 +191,7 @@ impl<P> BaseClient<P>
 where
   P: HttpProvider,
 {
+  #[cfg_attr(not(feature = "oauth2"), allow(clippy::borrow_deref_ref))]
   async fn send_inner(
     &self,
     method: Method,
