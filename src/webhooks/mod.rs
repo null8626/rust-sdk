@@ -1,74 +1,43 @@
-mod vote;
-#[cfg_attr(docsrs, doc(cfg(feature = "webhooks")))]
-pub use vote::*;
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
 
-#[cfg(feature = "actix-web")]
-mod actix_web;
+use chrono::Utc;
+use hmac::{Hmac, KeyInit, Mac};
+use sha2::Sha256;
 
-#[cfg(feature = "rocket")]
-mod rocket;
+mod models;
 
-cfg_if::cfg_if! {
-  if #[cfg(feature = "axum")] {
-    /// Extra helpers for working with axum.
-    #[cfg_attr(docsrs, doc(cfg(feature = "axum")))]
-    pub mod axum;
+pub use models::*;
+
+/// Verifies an incoming webhook request.
+#[must_use]
+pub fn verify(secret: &str, signature: &str, body: &str) -> bool {
+  let mut parts = signature.split(',');
+
+  let (Some(timestamp_pair), Some(signature_pair)) = (parts.next(), parts.next()) else {
+    return false;
+  };
+
+  let (Some(timestamp), Some(signature)) = (
+    timestamp_pair
+      .find('=')
+      .and_then(|index| timestamp_pair.get(index..))
+      .and_then(|timestamp| timestamp.parse::<i64>().ok()),
+    signature_pair
+      .find('=')
+      .and_then(|index| timestamp_pair.get(index..)),
+  ) else {
+    return false;
+  };
+
+  if (Utc::now().timestamp() - timestamp).abs() > 300 {
+    return false;
   }
-}
 
-cfg_if::cfg_if! {
-  if #[cfg(feature = "warp")] {
-    /// Extra helpers for working with warp.
-    #[cfg_attr(docsrs, doc(cfg(feature = "warp")))]
-    pub mod warp;
-  }
-}
+  let Ok(mut hmac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else {
+    return false;
+  };
 
-cfg_if::cfg_if! {
-  if #[cfg(any(feature = "actix-web", feature = "rocket"))] {
-    /// An unauthenticated incoming Top.gg webhook request.
-    #[must_use]
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "actix-web", feature = "rocket"))))]
-    pub struct Incoming<T> {
-      pub(crate) authorization: String,
-      pub(crate) data: T,
-    }
-
-    impl<T> Incoming<T> {
-      /// Authenticates a valid password with this request.
-      #[must_use]
-      #[inline(always)]
-      pub fn authenticate(self, password: &str) -> Option<T> {
-        if self.authorization == password {
-          Some(self.data)
-        } else {
-          None
-        }
-      }
-    }
-
-    impl<T> Clone for Incoming<T>
-    where
-      T: Clone,
-    {
-      #[inline(always)]
-      fn clone(&self) -> Self {
-        Self {
-          authorization: self.authorization.clone(),
-          data: self.data.clone(),
-        }
-      }
-    }
-  }
-}
-
-cfg_if::cfg_if! {
-  if #[cfg(any(feature = "axum", feature = "warp"))] {
-    /// Webhook event handler.
-    #[cfg_attr(docsrs, doc(cfg(any(feature = "axum", feature = "warp"))))]
-    #[async_trait::async_trait]
-    pub trait Webhook<T>: Send + Sync + 'static {
-      async fn callback(&self, data: T);
-    }
-  }
+  hmac.update(format!("{timestamp}.{body}").as_bytes());
+  hmac.verify_slice(signature.as_bytes()).is_ok()
 }

@@ -1,0 +1,678 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
+
+use super::Error;
+#[cfg(feature = "api")]
+use super::util;
+#[cfg(feature = "api")]
+use chrono::{DateTime, Utc};
+#[cfg(feature = "api")]
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::str::FromStr;
+#[cfg(feature = "api")]
+use std::{
+  fmt::{self, Display, Formatter},
+  marker::PhantomData,
+  ops::{Deref, DerefMut},
+};
+
+macro_rules! custom_enum_serde {
+  (
+    $(#[$enum_metas:meta])*
+    pub enum $enum_name:ident {
+      $(
+        $(#[$enum_prop_metas:meta])*
+        $enum_prop_name:ident => $enum_prop_mapping:ident,
+      )*
+    }
+  ) => {
+    $(#[$enum_metas])*
+    pub enum $enum_name {
+      $(
+        $(#[$enum_prop_metas])*
+        $enum_prop_name,
+      )*
+    }
+
+    impl FromStr for $enum_name {
+      type Err = Error;
+
+      fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+          $(stringify!($enum_prop_mapping) => Ok(Self::$enum_prop_name),)*
+
+          _ => Err(Error::EnumDeserialization(value.to_string())),
+        }
+      }
+    }
+
+    impl<'de> Deserialize<'de> for $enum_name {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: Deserializer<'de>,
+      {
+        let value = String::deserialize(deserializer)?;
+
+        FromStr::from_str(&value).map_err(de::Error::custom)
+      }
+    }
+
+    impl $enum_name {
+      pub(super) const fn as_str(&self) -> &'static str {
+        match self {
+          $(Self::$enum_prop_name => stringify!($enum_prop_mapping),)*
+        }
+      }
+    }
+
+    impl Serialize for $enum_name {
+      fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+      where
+        S: Serializer,
+      {
+        serializer.serialize_str(self.as_str())
+      }
+    }
+  };
+}
+
+#[cfg(feature = "api")]
+macro_rules! custom_enum_de {
+  (
+    $(#[$enum_metas:meta])*
+    pub enum $enum_name:ident {
+      $(
+        $(#[$enum_prop_metas:meta])*
+        $enum_prop_name:ident => $enum_prop_mapping:ident,
+      )*
+    }
+  ) => {
+    $(#[$enum_metas])*
+    pub enum $enum_name {
+      $(
+        $(#[$enum_prop_metas])*
+        $enum_prop_name,
+      )*
+    }
+
+    impl FromStr for $enum_name {
+      type Err = Error;
+
+      fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+          $(stringify!($enum_prop_mapping) => Ok(Self::$enum_prop_name),)*
+
+          _ => Err(Error::EnumDeserialization(value.to_string())),
+        }
+      }
+    }
+
+    impl<'de> Deserialize<'de> for $enum_name {
+      fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+      where
+        D: Deserializer<'de>,
+      {
+        let value = String::deserialize(deserializer)?;
+
+        FromStr::from_str(&value).map_err(de::Error::custom)
+      }
+    }
+  };
+}
+
+#[cfg(feature = "api")]
+macro_rules! custom_enum_ser {
+  (
+    $(#[$enum_metas:meta])*
+    pub enum $enum_name:ident {
+      $(
+        $(#[$enum_prop_metas:meta])*
+        $enum_prop_name:ident => $enum_prop_mapping:ident,
+      )*
+    }
+  ) => {
+    $(#[$enum_metas])*
+    pub enum $enum_name {
+      $(
+        $(#[$enum_prop_metas])*
+        $enum_prop_name,
+      )*
+    }
+
+    impl $enum_name {
+      pub(super) const fn as_str(&self) -> &'static str {
+        match self {
+          $(Self::$enum_prop_name => stringify!($enum_prop_mapping),)*
+        }
+      }
+    }
+
+    impl Serialize for $enum_name {
+      fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+      where
+        S: Serializer,
+      {
+        serializer.serialize_str(self.as_str())
+      }
+    }
+  };
+}
+
+custom_enum_serde! {
+  /// A project's platform.
+  #[non_exhaustive]
+  pub enum Platform {
+    /// Discord.
+    Discord => discord,
+
+    /// Roblox.
+    Roblox => roblox,
+  }
+}
+
+#[cfg(feature = "api")]
+custom_enum_serde! {
+  /// A project's type.
+  #[non_exhaustive]
+  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+  pub enum ProjectType {
+    /// A bot.
+    Bot => bot,
+
+    /// A server.
+    Server => server,
+
+    /// A game.
+    Game => game,
+  }
+}
+
+#[cfg(feature = "api")]
+custom_enum_ser! {
+  /// A supported locale.
+  #[non_exhaustive]
+  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+  pub enum Locale {
+    /// English.
+    English => en,
+
+    /// German.
+    German => de,
+
+    /// French.
+    French => fr,
+
+    /// Portuguese.
+    Portuguese => pt,
+
+    /// Turkish.
+    Turkish => tr,
+
+    /// Hindi.
+    Hindi => hi,
+
+    /// Japanese.
+    Japanese => ja,
+
+    /// Arabic.
+    Arabic => ar,
+
+    /// Dutch.
+    Dutch => nl,
+
+    /// Korean.
+    Korean => ko,
+
+    /// Italian.
+    Italian => it,
+
+    /// Spanish.
+    Spanish => es,
+
+    /// Russian.
+    Russian => ru,
+
+    /// Ukrainian.
+    Ukrainian => uk,
+
+    /// Vietnamese.
+    Vietnamese => vi,
+
+    /// Chinese Simplified.
+    ChineseSimplified => zh,
+  }
+}
+
+#[cfg(feature = "api")]
+custom_enum_ser! {
+  /// An announcement category.
+  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+  pub enum AnnouncementCategory {
+    /// A generic announcement.
+    Announcement => announcement,
+
+    /// An event.
+    Event => event,
+
+    /// A new feature.
+    NewFeature => new_feature,
+  }
+}
+
+#[cfg(feature = "api")]
+custom_enum_ser! {
+  /// A user's source platform.
+  #[non_exhaustive]
+  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+  pub enum UserSource {
+    /// The user came from Top.gg
+    Topgg => topgg,
+
+    /// The user came from Discord.
+    Discord => discord,
+  }
+}
+
+#[cfg(feature = "api")]
+custom_enum_de! {
+  /// A project's review status.
+  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+  pub enum ReviewStatus {
+    /// The project is currently a draft.
+    Draft => draft,
+
+    /// The project is currently in the reviewer queue.
+    InReview => in_review,
+
+    /// The project is approved and listed.
+    Approved => approved,
+  }
+}
+
+/// A partial project.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct PartialProject {
+  /// The project's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+
+  /// The project's platform ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub platform_id: u64,
+
+  /// The project's name in its platform.
+  pub name: String,
+
+  /// The project's platform.
+  pub platform: Platform,
+
+  /// The project's type.
+  pub r#type: ProjectType,
+}
+
+/// A project.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct Project {
+  /// The project's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+
+  /// The project's name in its platform.
+  pub name: String,
+
+  /// The project's platform.
+  pub platform: Platform,
+
+  /// The project's type.
+  pub r#type: ProjectType,
+
+  /// The project's headline.
+  pub headline: String,
+
+  /// The project's tags.
+  pub tags: Vec<String>,
+
+  /// The project's current vote count.
+  pub current_votes: usize,
+
+  /// The project's vote count.
+  pub total_votes: usize,
+
+  /// The project's review score.
+  pub review_score: f32,
+
+  /// The project's review count.
+  pub review_count: usize,
+}
+
+/// A Discord bot's metrics.
+#[derive(Default, Serialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct DiscordBotMetrics {
+  /// The bot's server count.
+  pub server_count: Option<usize>,
+
+  /// The bot's shard count.
+  pub shard_count: Option<usize>,
+}
+
+/// A Discord server's metrics.
+#[derive(Default, Serialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct DiscordServerMetrics {
+  /// The server's total member count.
+  pub total_member_count: Option<usize>,
+
+  /// The server's online member count.
+  pub online_member_count: Option<usize>,
+}
+
+/// A Roblox game's metrics.
+#[derive(Default, Serialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct RobloxGameMetrics {
+  /// The game's player count.
+  pub player_count: usize,
+}
+
+#[derive(Serialize)]
+#[cfg(feature = "api")]
+struct RawTimestampedMetrics {
+  timestamp: DateTime<Utc>,
+  metrics: serde_json::Value,
+}
+
+/// A project's timestamped metrics.
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct TimestampedMetrics<M: Serialize> {
+  data: Vec<RawTimestampedMetrics>,
+  _phantom: PhantomData<M>,
+}
+
+#[cfg(feature = "api")]
+impl<M> TimestampedMetrics<M>
+where
+  M: Serialize,
+{
+  /// Inserts a new timestamped metrics entry.
+  ///
+  /// # Errors
+  ///
+  /// If unable to serialize the metrics data to a JSON.
+  pub fn add(&mut self, timestamp: DateTime<Utc>, metrics: M) -> Result<(), serde_json::Error> {
+    self.data.push(RawTimestampedMetrics {
+      timestamp,
+      metrics: serde_json::to_value(metrics)?,
+    });
+
+    Ok(())
+  }
+
+  /// Retrieves the amount of timestamped metrics entries.
+  #[must_use]
+  pub const fn len(&self) -> usize {
+    self.data.len()
+  }
+
+  /// Whether there are no timestamped metrics entries.
+  #[must_use]
+  pub const fn is_empty(&self) -> bool {
+    self.data.is_empty()
+  }
+
+  /// Clears all timestamped metrics entries.
+  pub fn clear(&mut self) {
+    self.data.clear();
+  }
+}
+
+#[cfg(feature = "api")]
+impl<M> Serialize for TimestampedMetrics<M>
+where
+  M: Serialize,
+{
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    self.data.serialize(serializer)
+  }
+}
+
+/// A partial vote.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct PartialVote {
+  /// The vote's weight (1 normally, 2 during weekend multiplier.)
+  pub weight: u8,
+
+  /// When the vote was cast.
+  pub created_at: DateTime<Utc>,
+
+  /// When the user can vote again.
+  pub expires_at: DateTime<Utc>,
+}
+
+/// A vote.
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+#[derive(Deserialize)]
+pub struct Vote {
+  /// The vote's weight (1 normally, 2 during weekend multiplier.)
+  pub weight: u8,
+
+  /// When the vote was cast.
+  pub created_at: DateTime<Utc>,
+
+  /// When the user can vote again.
+  pub expires_at: DateTime<Utc>,
+
+  /// The voter's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub user_id: u64,
+
+  /// The voter's platform ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub platform_id: u64,
+}
+
+/// An integration.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct Integration {
+  /// The integration's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+
+  /// The integration's name.
+  pub name: String,
+
+  /// The integration's description.
+  pub description: String,
+
+  /// The integration's icon URL.
+  pub icon_url: String,
+
+  /// Whether the integration is connected to the project.
+  pub connected: bool,
+}
+
+/// A base webhook.
+#[cfg(feature = "api")]
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct BaseWebhook {
+  /// The webhook's label.
+  pub label: String,
+
+  /// The webhook's URL.
+  pub url: String,
+}
+
+/// A webhook.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct Webhook {
+  /// The webhook's label.
+  pub label: String,
+
+  /// The webhook's URL.
+  pub url: String,
+
+  /// The webhook's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+}
+
+/// A user's platform connection.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct UserConnection {
+  /// The connection's platform.
+  pub platform: Platform,
+
+  /// The user's platform ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+}
+
+/// A user.
+#[derive(Deserialize)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct User {
+  /// The user's Top.gg ID.
+  #[serde(deserialize_with = "util::deserialize_snowflake")]
+  pub id: u64,
+
+  /// The user's username.
+  pub username: String,
+
+  /// The user's avatar URL.
+  pub avatar: Option<String>,
+
+  /// The user's platform connections.
+  pub connections: Vec<UserConnection>,
+}
+
+/// A user's project.
+#[derive(Deserialize)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct UserProject {
+  /// The project's headline.
+  pub headline: String,
+
+  /// The project's review status.
+  pub review_status: ReviewStatus,
+}
+
+/// A project submission.
+#[derive(Serialize)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct ProjectSubmission {
+  /// The project's platform.
+  pub platform: Platform,
+
+  /// The project's type.
+  pub r#type: ProjectType,
+
+  /// The project's platform ID.
+  #[serde(serialize_with = "util::serialize_snowflake")]
+  pub platform_id: u64,
+
+  /// The project's headline.
+  pub headline: String,
+
+  /// The project's page content.
+  pub page_content: String,
+}
+
+/// An API call result that may contain paginated data.
+#[derive(Deserialize)]
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub struct Paginated<T: DeserializeOwned> {
+  pub(super) cursor: String,
+
+  #[serde(alias = "projects")]
+  data: Vec<T>,
+}
+
+#[cfg(feature = "api")]
+impl<T> Deref for Paginated<T>
+where
+  T: DeserializeOwned,
+{
+  type Target = Vec<T>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.data
+  }
+}
+
+#[cfg(feature = "api")]
+impl<T> DerefMut for Paginated<T>
+where
+  T: DeserializeOwned,
+{
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.data
+  }
+}
+
+/// A Top.gg snowflake.
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub enum Snowflake {
+  /// The snowflake's value.
+  Snowflake(u64),
+
+  /// `@me`.
+  Me,
+}
+
+#[cfg(feature = "api")]
+impl From<u64> for Snowflake {
+  fn from(value: u64) -> Self {
+    Self::Snowflake(value)
+  }
+}
+
+#[cfg(feature = "api")]
+impl FromStr for Snowflake {
+  type Err = <u64 as FromStr>::Err;
+
+  fn from_str(value: &str) -> Result<Self, Self::Err> {
+    if value == "@me" {
+      return Ok(Self::Me);
+    }
+
+    Ok(Self::Snowflake(value.parse()?))
+  }
+}
+
+#[cfg(feature = "api")]
+impl Display for Snowflake {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Snowflake(value) => value.fmt(f),
+
+      Self::Me => f.write_str("@me"),
+    }
+  }
+}

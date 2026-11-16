@@ -1,80 +1,47 @@
 [package]
 name = "topgg"
 version = "2.0.0"
-edition = "2021"
+edition = "2024"
 authors = ["null (https://github.com/null8626)", "Top.gg <support@top.gg> (https://top.gg)"]
-description = "A simple API wrapper for Top.gg written in Rust."
+description = "The community-maintained Rust SDK for Top.gg."
 readme = "README.md"
 repository = "https://github.com/Top-gg-Community/rust-sdk"
 license = "MIT"
 keywords = ["discord", "bot", "topgg"]
 categories = ["api-bindings", "web-programming::http-client"]
-exclude = [".gitattributes", ".github/", ".gitignore", "rustfmt.toml"]
+exclude = [".gitattributes", ".gitignore", "rustfmt.toml"]
 
 [dependencies]
-base64 = { version = "0.22", optional = true }
-cfg-if = "1"
-paste = { version = "1", optional = true }
-reqwest = { version = "0.12", optional = true }
+async-trait = { version = "0.1", optional = true }
+base64 = { version = "0.23", default-features = false, features = ["std"], optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+hex = { version = "0.4", optional = true }
+hmac = { version = "0.13", optional = true }
+rand = { version = "0.10", optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["charset", "default-tls", "http2"], optional = true }
+sha2 = { version = "0.11", default-features = false, features = ["alloc"], optional = true }
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["rt", "sync", "time"], optional = true }
+serde_json = { version = "1", optional = true }
+tokio = { version = "1.54", features = ["macros", "rt", "sync"], optional = true }
+tokio-util = { version = "0.7", optional = true }
 urlencoding = "2"
 
-serenity = { version = "0.12", features = ["builder", "client", "gateway", "model", "utils"], optional = true }
+[features]
+default = ["api", "oauth2"]
+api = ["async-trait", "reqwest", "serde_json"]
+oauth2 = ["api", "base64", "hex", "rand", "sha2", "tokio", "tokio-util"]
+webhooks = ["hmac", "sha2"]
 
-twilight-http = { version = "0.15", optional = true }
-twilight-model = { version = "0.15", optional = true }
-twilight-cache-inmemory = { version = "0.15", optional = true }
-
-chrono = { version = "0.4", default-features = false, optional = true, features = ["serde", "now"] }
-serde_json = { version = "1", optional = true }
-
-rocket = { version = "0.5", default-features = false, features = ["json"], optional = true }
-axum = { version = "0.8", default-features = false, optional = true, features = ["http1", "tokio"] }
-async-trait = { version = "0.1", optional = true }
-warp = { version = "0.3", default-features = false, optional = true }
-actix-web = { version = "4", default-features = false, optional = true }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
-twilight-gateway = "0.15"
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(doc_cfg)"] }
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-cast-lossless = "allow"
-cast-possible-truncation = "allow"
-cast-possible-wrap = "allow"
-cast-sign-loss = "allow"
-inline-always = "allow"
-module-name-repetitions = "allow"
-must-use-candidate = "allow"
-return-self-not-must-use = "allow"
-similar-names = "allow"
-single-match-else = "allow"
-too-many-lines = "allow"
-unnecessary-wraps = "allow"
-unreadable-literal = "allow"
+nursery = { level = "warn", priority = -1 }
+trait_duplication_in_bounds = "allow"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
-
-[features]
-default = ["api"]
-api = ["async-trait", "base64", "chrono", "reqwest", "serde_json"]
-bot-autoposter = ["api", "tokio"]
-autoposter = ["bot-autoposter"]
-
-serenity = ["dep:serenity", "paste"]
-serenity-cached = ["serenity", "serenity/cache"]
-
-twilight = ["twilight-model", "twilight-http"]
-twilight-cached = ["twilight", "twilight-cache-inmemory"]
-
-webhooks = []
-rocket = ["webhooks", "dep:rocket"]
-axum = ["webhooks", "async-trait", "serde_json", "dep:axum"]
-warp = ["webhooks", "async-trait", "dep:warp"]
-actix-web = ["webhooks", "dep:actix-web"]

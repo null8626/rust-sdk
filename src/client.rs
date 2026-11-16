@@ -1,416 +1,1117 @@
-use crate::{
-  bot::{Bot, BotQuery, BotStats, Bots, IsWeekend},
-  util,
-  vote::{Voted, Voter},
-  Error, Result, Snowflake,
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
+
+use super::{
+  AnnouncementCategory, BaseWebhook, Error, Integration, Locale, Paginated, PartialProject,
+  PartialVote, Project, Snowflake, TimestampedMetrics, UserSource, Vote, Webhook, util,
 };
-use reqwest::{header, IntoUrl, Method, Response, StatusCode, Version};
-use serde::{de::DeserializeOwned, Deserialize};
+#[cfg(feature = "oauth2")]
+use super::{ProjectSubmission, User, UserProject};
+#[cfg(feature = "oauth2")]
+use base64::engine::{Engine, general_purpose::URL_SAFE_NO_PAD};
+#[cfg(feature = "oauth2")]
+use chrono::Duration;
+use chrono::{DateTime, Utc};
+use reqwest::{Client as HttpClient, IntoUrl, Method, Response};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+#[cfg(feature = "oauth2")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "oauth2")]
+use std::sync::Arc;
+use std::{collections::HashMap, ops::Deref};
+#[cfg(feature = "oauth2")]
+use tokio::{
+  sync::{RwLock, RwLockReadGuard},
+  task::{self, JoinHandle},
+  time::sleep,
+};
+#[cfg(feature = "oauth2")]
+use tokio_util::sync::CancellationToken;
 
-cfg_if::cfg_if! {
-  if #[cfg(feature = "bot-autoposter")] {
-    use crate::bot_autoposter;
-    use std::sync::Arc;
-
-    type SyncedClient = Arc<InnerClient>;
-  } else {
-    type SyncedClient = InnerClient;
-  }
-}
-
-#[derive(Deserialize)]
-#[serde(rename = "kebab-case")]
-struct Ratelimit {
-  retry_after: u16,
-}
-
-#[macro_export]
 macro_rules! api {
   ($e:literal) => {
-    concat!("https://top.gg/api", $e)
+    concat!("https://top.gg/api/v1", $e)
   };
 
   ($e:literal, $($rest:tt)*) => {
-    format!($crate::client::api!($e), $($rest)*)
+    format!(api!($e), $($rest)*)
   };
 }
 
-pub(crate) use api;
+#[doc(hidden)]
+#[cfg(not(feature = "oauth2"))]
+pub type TokenGuard<'t> = &'t str;
 
-pub struct InnerClient {
-  http: reqwest::Client,
+#[doc(hidden)]
+#[cfg(feature = "oauth2")]
+pub enum TokenGuard<'t> {
+  /// Direct access.
+  Direct(&'t str),
+
+  /// Access through [`RwLock`].
+  Guard(RwLockReadGuard<'t, Oauth2Session>),
+}
+
+#[cfg(feature = "oauth2")]
+impl Deref for TokenGuard<'_> {
+  type Target = str;
+
+  fn deref(&self) -> &Self::Target {
+    match self {
+      Self::Direct(token) => token,
+
+      Self::Guard(guard) => &guard.token,
+    }
+  }
+}
+
+#[doc(hidden)]
+#[async_trait::async_trait]
+pub trait HttpProvider: Sync {
+  /// Retrieves the client's token.
+  async fn get_token(&self) -> TokenGuard<'_>;
+
+  /// Retrieves the client's underlying [`reqwest::Client`] instance.
+  fn get_http(&self) -> &HttpClient;
+}
+
+#[doc(hidden)]
+pub struct DirectHttpProvider {
+  http: HttpClient,
   token: String,
-  id: u64,
+}
+
+#[async_trait::async_trait]
+impl HttpProvider for DirectHttpProvider {
+  async fn get_token(&self) -> TokenGuard<'_> {
+    #[cfg(feature = "oauth2")]
+    {
+      TokenGuard::Direct(&self.token)
+    }
+
+    #[cfg(not(feature = "oauth2"))]
+    {
+      &self.token
+    }
+  }
+
+  fn get_http(&self) -> &HttpClient {
+    &self.http
+  }
+}
+
+#[doc(hidden)]
+#[derive(Clone)]
+#[cfg(feature = "oauth2")]
+pub struct Oauth2HttpProvider {
+  oauth2: Arc<BaseOauth2>,
+  session: Arc<Oauth2SessionWrapper>,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2HttpProvider {
+  #[allow(clippy::significant_drop_tightening)]
+  async fn refresh_token(&self) -> Result<(), Error> {
+    let mut session = self.session.session.write().await;
+    let body = format!(
+      "grant_type=refresh_token&client_id={}&client_secret={}&access_token={}",
+      self.oauth2.client_id,
+      self.oauth2.client_secret,
+      urlencoding::encode(&session.refresh_token)
+    )
+    .into_bytes();
+
+    let response = util::request(
+      &self.oauth2.http,
+      Method::POST,
+      api!("/oauth2/token"),
+      None,
+      "application/x-www-form-urlencoded",
+      body,
+    )
+    .await?;
+
+    match response.bytes().await {
+      Ok(bytes) => match serde_json::from_slice::<Oauth2Session>(&bytes) {
+        Ok(new_session) => {
+          *session = new_session;
+
+          Ok(())
+        }
+
+        Err(error) => Err(Error::Deserialization(error)),
+      },
+
+      Err(error) => Err(Error::Incoming(error)),
+    }
+  }
+}
+
+#[cfg(feature = "oauth2")]
+#[async_trait::async_trait]
+impl HttpProvider for Oauth2HttpProvider {
+  async fn get_token(&self) -> TokenGuard<'_> {
+    TokenGuard::Guard(self.session.session.read().await)
+  }
+
+  fn get_http(&self) -> &HttpClient {
+    &self.oauth2.http
+  }
+}
+
+#[derive(Serialize)]
+struct EditProject {
+  headline: HashMap<Locale, String>,
+  page_content: HashMap<Locale, String>,
+}
+
+#[derive(Serialize)]
+struct PostAnnouncement {
+  title: String,
+  content: String,
+  category: AnnouncementCategory,
+}
+
+#[derive(Serialize)]
+struct PostTimestampedMetrics<M: Serialize> {
+  data: TimestampedMetrics<M>,
 }
 
 #[derive(Deserialize)]
-pub(crate) struct ErrorJson {
-  #[serde(default, alias = "message", alias = "detail")]
-  message: Option<String>,
+struct RotateWebhookSecret {
+  secret: String,
 }
 
-// This is implemented here because the Discord bot autoposter needs to access this struct from a different thread.
-impl InnerClient {
-  pub(crate) fn new(token: String) -> Self {
-    let id = util::parse_api_token(&token);
+/// A base API client.
+pub struct BaseClient<P> {
+  provider: P,
+}
 
-    Self {
-      http: reqwest::Client::new(),
-      token,
-      id,
-    }
-  }
-
-  async fn send_inner(&self, method: Method, url: impl IntoUrl, body: Vec<u8>) -> Result<Response> {
-    match self
-      .http
-      .execute(
-        self
-          .http
-          .request(method, url)
-          .header(header::AUTHORIZATION, &self.token)
-          .header(header::CONNECTION, "close")
-          .header(header::CONTENT_LENGTH, body.len())
-          .header(header::CONTENT_TYPE, "application/json")
-          .header(
-            header::USER_AGENT,
-            "topgg (https://github.com/top-gg/rust-sdk) Rust",
-          )
-          .version(Version::HTTP_11)
-          .body(body)
-          .build()
-          .unwrap(),
-      )
-      .await
-    {
-      Ok(response) => {
-        let status = response.status();
-
-        if status.is_success() {
-          Ok(response)
-        } else {
-          Err(match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => panic!("Invalid API token."),
-            StatusCode::NOT_FOUND => Error::NotFound(
-              util::parse_json::<ErrorJson>(response)
-                .await
-                .ok()
-                .and_then(|err| err.message),
-            ),
-            StatusCode::TOO_MANY_REQUESTS => match util::parse_json::<Ratelimit>(response).await {
-              Ok(ratelimit) => Error::Ratelimit {
-                retry_after: ratelimit.retry_after,
-              },
-              _ => Error::InternalServerError,
-            },
-            _ => Error::InternalServerError,
-          })
-        }
-      }
-
-      Err(err) => Err(Error::InternalClientError(err)),
-    }
-  }
-
-  #[inline(always)]
-  pub(crate) async fn send<T>(
+impl<P> BaseClient<P>
+where
+  P: HttpProvider,
+{
+  async fn send_inner(
     &self,
     method: Method,
     url: impl IntoUrl,
-    body: Option<Vec<u8>>,
-  ) -> Result<T>
+    body: Vec<u8>,
+  ) -> Result<Response, Error> {
+    let http = self.provider.get_http();
+    let token = self.provider.get_token().await;
+
+    util::request(http, method, url, Some(&*token), "application/json", body).await
+  }
+
+  async fn send<T>(&self, method: Method, url: impl IntoUrl, body: Vec<u8>) -> Result<T, Error>
   where
     T: DeserializeOwned,
   {
-    match self.send_inner(method, url, body.unwrap_or_default()).await {
-      Ok(response) => util::parse_json(response).await,
-      Err(err) => Err(err),
+    let response = self.send_inner(method, url, body).await?;
+
+    match response.bytes().await {
+      Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deserialization),
+
+      Err(error) => Err(Error::Incoming(error)),
     }
   }
 
-  pub(crate) async fn post_bot_server_count(&self, server_count: usize) -> Result<()> {
-    if server_count == 0 {
-      return Err(Error::InvalidRequest);
+  /// Fetches the projects the current credential covers.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_projects(&self) -> Result<Paginated<PartialProject>, Error> {
+    self.send(Method::GET, api!("/projects"), vec![]).await
+  }
+
+  /// Fetches the projects the current credential covers after a previously returned paginated list.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_projects_after(
+    &self,
+    reference: &Paginated<PartialProject>,
+  ) -> Result<Paginated<PartialProject>, Error> {
+    self
+      .send(
+        Method::GET,
+        api!("/projects?cursor={}", reference.cursor),
+        vec![],
+      )
+      .await
+  }
+
+  /// Fetches a project associated with the current token.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_project(&self, id: impl Into<Snowflake>) -> Result<Project, Error> {
+    self
+      .send(Method::GET, api!("/projects/{}", id.into()), vec![])
+      .await
+  }
+
+  /// Updates the headline and/or page content for a project. Both fields are locale-keyed, so you can set content for multiple languages in a single request.
+  ///
+  /// # Errors
+  ///
+  /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn edit_project(
+    &self,
+    id: impl Into<Snowflake>,
+    headline: HashMap<Locale, String>,
+    page_content: HashMap<Locale, String>,
+  ) -> Result<(), Error> {
+    for value in headline.values() {
+      util::enforce_constraints(value.len(), 3..=140)?;
     }
+
+    for value in page_content.values() {
+      util::enforce_constraints(value.len(), 300..=50000)?;
+    }
+
+    let body = serde_json::to_vec(&EditProject {
+      headline,
+      page_content,
+    })
+    .map_err(Error::Serialization)?;
+
+    self
+      .send_inner(Method::PATCH, api!("/projects/{}", id.into()), body)
+      .await?;
+
+    Ok(())
+  }
+
+  /// Creates a new announcement for a project. Announcements appear on a project's page and can be used to notify users about updates, new features, or other news.
+  ///
+  /// # Errors
+  ///
+  /// If the `title` or `content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_announcement(
+    &self,
+    id: impl Into<Snowflake>,
+    title: String,
+    content: String,
+    category: AnnouncementCategory,
+  ) -> Result<(), Error> {
+    util::enforce_constraints(title.len(), 3..=100)?;
+    util::enforce_constraints(content.len(), 100..=2000)?;
+
+    let body = serde_json::to_vec(&PostAnnouncement {
+      title,
+      content,
+      category,
+    })
+    .map_err(Error::Serialization)?;
 
     self
       .send_inner(
         Method::POST,
-        api!("/bots/stats"),
-        serde_json::to_vec(&BotStats {
-          server_count: Some(server_count),
-        })
-        .unwrap(),
+        api!("/projects/{}/announcements", id.into()),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Submits a single metrics payload for a project. Use this to push fresh numbers after an event such as joining or leaving a guild player connecting.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_metrics<M>(&self, id: impl Into<Snowflake>, metrics: M) -> Result<(), Error>
+  where
+    M: Serialize,
+  {
+    let body = serde_json::to_vec(&metrics).map_err(Error::Serialization)?;
+
+    self
+      .send_inner(Method::PATCH, api!("/projects/{}/metrics", id.into()), body)
+      .await?;
+
+    Ok(())
+  }
+
+  /// Submits up to 100 metrics entries in a single request.
+  ///
+  /// # Errors
+  ///
+  /// If the `metrics` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_timestamped_metrics<M>(
+    &self,
+    id: impl Into<Snowflake>,
+    metrics: TimestampedMetrics<M>,
+  ) -> Result<(), Error>
+  where
+    M: Serialize,
+  {
+    util::enforce_constraints(metrics.len(), 1..=100)?;
+
+    let body = serde_json::to_vec(&PostTimestampedMetrics { data: metrics })
+      .map_err(Error::Serialization)?;
+
+    self
+      .send_inner(
+        Method::POST,
+        api!("/projects/{}/metrics/batch", id.into()),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Overwrites the list of slash command definitions for a bot project on Top.gg. This is only applicable to bot-type projects on the discord platform.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_commands<C>(&self, id: impl Into<Snowflake>, commands: C) -> Result<(), Error>
+  where
+    C: Serialize,
+  {
+    let body = serde_json::to_vec(&commands).map_err(Error::Serialization)?;
+
+    self
+      .send_inner(Method::PUT, api!("/projects/{}/commands", id.into()), body)
+      .await?;
+
+    Ok(())
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page.)
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_votes(
+    &self,
+    id: impl Into<Snowflake>,
+    since: DateTime<Utc>,
+  ) -> Result<Paginated<Vote>, Error> {
+    self
+      .send(
+        Method::GET,
+        api!(
+          "/projects/{}/votes?startDate={}",
+          id.into(),
+          urlencoding::encode(&since.to_rfc3339())
+        ),
+        vec![],
       )
       .await
-      .map(|_| ())
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page), after a previously returned paginated list.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_votes_after(
+    &self,
+    id: impl Into<Snowflake>,
+    reference: &Paginated<Vote>,
+  ) -> Result<Paginated<Vote>, Error> {
+    self
+      .send(
+        Method::GET,
+        api!("/projects/{}/votes?cursor={}", id.into(), reference.cursor),
+        vec![],
+      )
+      .await
+  }
+
+  /// Fetches the most recent vote for a specific user.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_vote(
+    &self,
+    id: impl Into<Snowflake>,
+    user_id: impl Into<Snowflake>,
+    source: UserSource,
+  ) -> Result<PartialVote, Error> {
+    self
+      .send(
+        Method::GET,
+        api!(
+          "/projects/{}/votes/{}?source={}",
+          id.into(),
+          user_id.into(),
+          source.as_str()
+        ),
+        vec![],
+      )
+      .await
+  }
+
+  /// Fetches the integrations available for a project and whether each one is connected.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_integrations(
+    &self,
+    id: impl Into<Snowflake>,
+  ) -> Result<Vec<Integration>, Error> {
+    self
+      .send(
+        Method::GET,
+        api!("/projects/{}/integrations", id.into()),
+        vec![],
+      )
+      .await
+  }
+
+  /// Connects an integration to the project. Top.gg runs the integration handshake and starts delivering events to it.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn connect_integration(
+    &self,
+    project_id: impl Into<Snowflake>,
+    integration_id: u64,
+  ) -> Result<(), Error> {
+    self
+      .send_inner(
+        Method::PUT,
+        api!(
+          "/projects/{}/integrations/{}",
+          project_id.into(),
+          integration_id
+        ),
+        vec![],
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Disconnects an integration the application connected. The integration receives an integration.delete event.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn disconnect_integration(
+    &self,
+    project_id: impl Into<Snowflake>,
+    integration_id: u64,
+  ) -> Result<(), Error> {
+    self
+      .send_inner(
+        Method::DELETE,
+        api!(
+          "/projects/{}/integrations/{}",
+          project_id.into(),
+          integration_id,
+        ),
+        vec![],
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Fetches the webhooks the application created on the project.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_webhooks(&self, id: impl Into<Snowflake>) -> Result<Vec<Webhook>, Error> {
+    self
+      .send(
+        Method::GET,
+        api!("/projects/{}/webhooks", id.into()),
+        vec![],
+      )
+      .await
+  }
+
+  /// Creates a vote webhook on the project.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn create_webhook(
+    &self,
+    id: impl Into<Snowflake>,
+    webhook: BaseWebhook,
+  ) -> Result<Webhook, Error> {
+    let body = serde_json::to_vec(&webhook).map_err(Error::Serialization)?;
+
+    self
+      .send(Method::POST, api!("/projects/{}/webhooks", id.into()), body)
+      .await
+  }
+
+  /// Deletes a webhook the application created.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn delete_webhook(
+    &self,
+    project_id: impl Into<Snowflake>,
+    webhook_id: u64,
+  ) -> Result<(), Error> {
+    self
+      .send_inner(
+        Method::DELETE,
+        api!("/projects/{}/webhooks/{}", project_id.into(), webhook_id),
+        vec![],
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Replaces the signing secret of a webhook the application created. The previous secret stops working immediately.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn rotate_webhook_secret(
+    &self,
+    project_id: impl Into<Snowflake>,
+    webhook_id: u64,
+  ) -> Result<String, Error> {
+    let response: RotateWebhookSecret = self
+      .send(
+        Method::POST,
+        api!(
+          "/projects/{}/webhooks/{}/rotate",
+          project_id.into(),
+          webhook_id
+        ),
+        vec![],
+      )
+      .await?;
+
+    Ok(response.secret)
+  }
+
+  /// Sends a webhook.test event to a webhook the application created.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn test_webhook(
+    &self,
+    project_id: impl Into<Snowflake>,
+    webhook_id: u64,
+  ) -> Result<(), Error> {
+    self
+      .send_inner(
+        Method::POST,
+        api!(
+          "/projects/{}/webhooks/{}/test",
+          project_id.into(),
+          webhook_id
+        ),
+        vec![],
+      )
+      .await?;
+
+    Ok(())
   }
 }
 
-/// Interact with the API's endpoints.
-#[must_use]
+impl<P> Clone for BaseClient<P>
+where
+  P: Clone,
+{
+  fn clone(&self) -> Self {
+    Self {
+      provider: self.provider.clone(),
+    }
+  }
+}
+
+impl<P> Deref for BaseClient<P> {
+  type Target = P;
+
+  fn deref(&self) -> &Self::Target {
+    &self.provider
+  }
+}
+
+/// A project or application API client.
 pub struct Client {
-  inner: SyncedClient,
+  base: BaseClient<DirectHttpProvider>,
 }
 
 impl Client {
-  /// Creates a new instance.
-  ///
-  /// To retrieve your API token, [see this tutorial](https://github.com/top-gg-community/rust-sdk/assets/60427892/d2df5bd3-bc48-464c-b878-a04121727bff).
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
-  /// ```
-  #[inline(always)]
+  /// Creates the client.
+  #[must_use]
   pub fn new(token: String) -> Self {
-    let inner = InnerClient::new(token);
-
-    #[cfg(feature = "bot-autoposter")]
-    let inner = Arc::new(inner);
-
-    Self { inner }
-  }
-
-  /// Fetches a Discord bot from its ID.
-  ///
-  /// # Panics
-  ///
-  /// Panics if:
-  /// - The specified ID is invalid.
-  /// - The client uses an invalid API token.
-  ///
-  /// # Errors
-  ///
-  /// Returns [`Err`] if:
-  /// - The specified bot does not exist. ([`NotFound`][crate::Error::NotFound])
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// let bot = client.get_bot(264811613708746752).await.unwrap();
-  /// ```
-  pub async fn get_bot<I>(&self, id: I) -> Result<Bot>
-  where
-    I: Snowflake,
-  {
-    self
-      .inner
-      .send(Method::GET, api!("/bots/{}", id.as_snowflake()), None)
-      .await
-  }
-
-  /// Fetches your Discord bot's posted server count.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
-  ///
-  /// # Errors
-  ///
-  /// Returns [`Err`] if:
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// let server_count = client.get_bot_server_count().await.unwrap();
-  /// ```
-  pub async fn get_bot_server_count(&self) -> Result<Option<usize>> {
-    self
-      .inner
-      .send(Method::GET, api!("/bots/stats"), None)
-      .await
-      .map(|stats: BotStats| stats.server_count)
-  }
-
-  /// Updates the server count in your Discord bot's Top.gg page.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
-  ///
-  /// # Errors
-  ///
-  /// Returns [`Err`] if:
-  /// - The bot is currently in zero servers. ([`InvalidRequest`][crate::Error::InvalidRequest])
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// client.post_bot_server_count(bot.server_count()).await.unwrap();
-  /// ```
-  #[inline(always)]
-  pub async fn post_bot_server_count(&self, server_count: usize) -> Result<()> {
-    self.inner.post_bot_server_count(server_count).await
-  }
-
-  /// Fetches your project's recent unique voters.
-  ///
-  /// The amount of voters returned can't exceed 100, so you would need to use the `page` argument for this.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
-  ///
-  /// # Errors
-  ///
-  /// Returns [`Err`] if:
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// //                             Page number
-  /// let voters = client.get_voters(1).await.unwrap();
-  ///
-  /// for voter in voters {
-  ///   println!("{}", voter.username);
-  /// }
-  /// ```
-  pub async fn get_voters(&self, mut page: usize) -> Result<Vec<Voter>> {
-    if page < 1 {
-      page = 1;
+    Self {
+      base: BaseClient {
+        provider: DirectHttpProvider {
+          token,
+          http: HttpClient::default(),
+        },
+      },
     }
-
-    self
-      .inner
-      .send(
-        Method::GET,
-        api!("/bots/{}/votes?page={}", self.inner.id, page),
-        None,
-      )
-      .await
   }
 
-  pub(crate) async fn get_bots_inner(&self, path: String) -> Result<Vec<Bot>> {
-    self
-      .inner
-      .send::<Bots>(Method::GET, api!("{}", path), None)
-      .await
-      .map(|res| res.results)
-  }
-
-  /// Fetches Discord bots that matches the specified query.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
+  /// Fetches a project associated with the current token.
   ///
   /// # Errors
   ///
-  /// Returns [`Err`] if:
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
-  ///
-  /// # Example
-  ///
-  /// ```rust,no_run
-  /// let bots = client
-  ///   .get_bots()
-  ///   .limit(250)
-  ///   .skip(50)
-  ///   .sort_by_monthly_votes()
-  ///   .await
-  ///   .unwrap();
-  ///
-  /// for bot in bots {
-  ///   println!("{}", bot.name);
-  /// }
-  /// ```
-  #[inline(always)]
-  pub fn get_bots(&self) -> BotQuery<'_> {
-    BotQuery::new(self)
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_project(&self) -> Result<Project, Error> {
+    self.base.get_project(Snowflake::Me).await
   }
 
-  /// Checks if a Top.gg user has voted for your Discord bot in the past 12 hours.
-  ///
-  /// # Panics
-  ///
-  /// Panics if:
-  /// - The specified ID is invalid.
-  /// - The client uses an invalid API token.
+  /// Updates the headline and/or page content for a project. Both fields are locale-keyed, so you can set content for multiple languages in a single request.
   ///
   /// # Errors
   ///
-  /// Returns [`Err`] if:
-  /// - The specified user has not logged in to Top.gg. ([`NotFound`][crate::Error::NotFound])
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
+  /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn edit_project(
+    &self,
+    headline: HashMap<Locale, String>,
+    page_content: HashMap<Locale, String>,
+  ) -> Result<(), Error> {
+    self
+      .base
+      .edit_project(Snowflake::Me, headline, page_content)
+      .await
+  }
+
+  /// Creates a new announcement for a project. Announcements appear on a project's page and can be used to notify users about updates, new features, or other news.
   ///
-  /// # Example
+  /// # Errors
   ///
-  /// ```rust,no_run
-  /// let has_voted = client.has_voted(8226924471638491136).await.unwrap();
-  /// ```
-  pub async fn has_voted<I>(&self, user_id: I) -> Result<bool>
+  /// If the `title` or `content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_announcement(
+    &self,
+    title: String,
+    content: String,
+    category: AnnouncementCategory,
+  ) -> Result<(), Error> {
+    self
+      .base
+      .post_announcement(Snowflake::Me, title, content, category)
+      .await
+  }
+
+  /// Submits a single metrics payload for a project. Use this to push fresh numbers after an event such as joining or leaving a guild player connecting.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_metrics<M>(&self, metrics: M) -> Result<(), Error>
   where
-    I: Snowflake,
+    M: Serialize,
+  {
+    self.base.post_metrics(Snowflake::Me, metrics).await
+  }
+
+  /// Submits up to 100 metrics entries in a single request.
+  ///
+  /// # Errors
+  ///
+  /// If the `metrics` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_timestamped_metrics<M>(
+    &self,
+    metrics: TimestampedMetrics<M>,
+  ) -> Result<(), Error>
+  where
+    M: Serialize,
   {
     self
-      .inner
-      .send::<Voted>(
-        Method::GET,
-        api!("/bots/check?userId={}", user_id.as_snowflake()),
-        None,
-      )
+      .base
+      .post_timestamped_metrics(Snowflake::Me, metrics)
       .await
-      .map(|res| res.voted != 0)
   }
 
-  /// Checks if the weekend multiplier is active, where a single vote counts as two.
-  ///
-  /// # Panics
-  ///
-  /// Panics if the client uses an invalid API token.
+  /// Overwrites the list of slash command definitions for a bot project on Top.gg. This is only applicable to bot-type projects on the discord platform.
   ///
   /// # Errors
   ///
-  /// Returns [`Err`] if:
-  /// - HTTP request failure from the client-side. ([`InternalClientError`][crate::Error::InternalClientError])
-  /// - HTTP request failure from the server-side. ([`InternalServerError`][crate::Error::InternalServerError])
-  /// - Ratelimited from sending more requests. ([`Ratelimit`][crate::Error::Ratelimit])
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_commands<C>(&self, commands: C) -> Result<(), Error>
+  where
+    C: Serialize,
+  {
+    self.base.post_commands(Snowflake::Me, commands).await
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page.)
   ///
-  /// # Example
+  /// # Errors
   ///
-  /// ```rust,no_run
-  /// let is_weekend = client.is_weekend().await.unwrap();
-  /// ```
-  pub async fn is_weekend(&self) -> Result<bool> {
-    self
-      .inner
-      .send::<IsWeekend>(Method::GET, api!("/weekend"), None)
-      .await
-      .map(|res| res.is_weekend)
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_votes(&self, since: DateTime<Utc>) -> Result<Paginated<Vote>, Error> {
+    self.base.get_votes(Snowflake::Me, since).await
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page), after a previously returned paginated list.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_votes_after(
+    &self,
+    reference: &Paginated<Vote>,
+  ) -> Result<Paginated<Vote>, Error> {
+    self.base.get_votes_after(Snowflake::Me, reference).await
+  }
+
+  /// Fetches the most recent vote for a specific user.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_vote(
+    &self,
+    user_id: impl Into<Snowflake>,
+    source: UserSource,
+  ) -> Result<PartialVote, Error> {
+    self.base.get_vote(Snowflake::Me, user_id, source).await
   }
 }
 
-cfg_if::cfg_if! {
-  if #[cfg(feature = "bot-autoposter")] {
-    impl bot_autoposter::AsClientSealed for Client {
-      #[inline(always)]
-      fn as_client(&self) -> Arc<InnerClient> {
-        Arc::clone(&self.inner)
-      }
-    }
+impl Deref for Client {
+  type Target = BaseClient<DirectHttpProvider>;
 
-    impl bot_autoposter::AsClient for Client {}
+  fn deref(&self) -> &Self::Target {
+    &self.base
+  }
+}
+
+#[cfg(feature = "oauth2")]
+fn default_token_expires_at() -> DateTime<Utc> {
+  Utc::now() + Duration::weeks(1)
+}
+
+/// An oauth2 session.
+#[derive(Deserialize)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct Oauth2Session {
+  /// The session's access token.
+  #[serde(rename = "access_token")]
+  pub token: String,
+
+  /// The session's refresh token.
+  #[serde(rename = "refresh_token")]
+  pub refresh_token: String,
+
+  /// When the session's access token expires.
+  #[serde(skip_deserializing, default = "default_token_expires_at")]
+  pub token_expires_at: DateTime<Utc>,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2Session {
+  /// Whether the session's access token has expired.
+  #[must_use]
+  pub fn has_expired(&self) -> bool {
+    Utc::now() >= self.token_expires_at
+  }
+}
+
+#[cfg(feature = "oauth2")]
+struct Oauth2SessionWrapper {
+  session: RwLock<Oauth2Session>,
+  cancel: CancellationToken,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2SessionWrapper {
+  async fn delay(&self, duration: Duration) -> bool {
+    let Ok(duration) = duration.to_std() else {
+      return true;
+    };
+
+    tokio::select! {
+      () = self.cancel.cancelled() => false,
+
+      () = sleep(duration) => true,
+    }
+  }
+}
+
+#[cfg(feature = "oauth2")]
+impl Drop for Oauth2SessionWrapper {
+  fn drop(&mut self) {
+    self.cancel.cancel();
+  }
+}
+
+#[cfg(feature = "oauth2")]
+struct BaseOauth2URL {
+  state: String,
+  code_verifier: String,
+  url: String,
+}
+
+/// A thread-safe oauth2 URL.
+#[derive(Clone)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct Oauth2URL {
+  oauth2: Arc<BaseOauth2>,
+  url: Arc<BaseOauth2URL>,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2URL {
+  /// Retrieves the URL's state.
+  #[must_use]
+  pub fn get_state(&self) -> &str {
+    &self.url.state
+  }
+
+  /// Retrieves the URL's code verifier.
+  #[must_use]
+  pub fn get_code_verifier(&self) -> &str {
+    &self.url.code_verifier
+  }
+
+  /// Retrieves the full URL.
+  #[must_use]
+  pub fn get_url(&self) -> &str {
+    &self.url.url
+  }
+
+  /// Exchanges an authorization code for an oauth2 session.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn exchange(&self, code: &str) -> Result<Oauth2Session, Error> {
+    let body = format!("grant_type=authorization_code&client_id={}&client_secret={}&code={}&redirect_uri={}&code_verifier={}", self.oauth2.client_id, self.oauth2.client_secret, urlencoding::encode(code), urlencoding::encode(&self.oauth2.redirect_uri), urlencoding::encode(&self.url.code_verifier)).into_bytes();
+
+    let response = util::request(
+      &self.oauth2.http,
+      Method::POST,
+      api!("/oauth2/token"),
+      None,
+      "application/x-www-form-urlencoded",
+      body,
+    )
+    .await?;
+
+    match response.bytes().await {
+      Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deserialization),
+
+      Err(error) => Err(Error::Incoming(error)),
+    }
+  }
+}
+
+#[cfg(feature = "oauth2")]
+struct BaseOauth2 {
+  client_id: u64,
+  client_secret: String,
+  redirect_uri: String,
+  scope: String,
+  http: HttpClient,
+}
+
+/// A thread-safe oauth2 manager.
+#[derive(Clone)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct Oauth2 {
+  base: Arc<BaseOauth2>,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2 {
+  /// Creates the manager.
+  #[must_use]
+  pub fn new(client_id: u64, client_secret: String, redirect_uri: String, scopes: &[&str]) -> Self {
+    Self {
+      base: Arc::new(BaseOauth2 {
+        client_id,
+        client_secret,
+        redirect_uri,
+        scope: scopes.join("+"),
+        http: HttpClient::default(),
+      }),
+    }
+  }
+
+  /// Creates an oauth2 URL from an existing state and code verifier.
+  #[must_use]
+  pub fn new_url_from(&self, state: String, code_verifier: String) -> Oauth2URL {
+    let code_challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(code_verifier.as_bytes()));
+
+    let url = format!(
+      "https://top.gg/oauth2/authorize?response_type=code&code_challenge_method=S256&client_id={}&redirect_uri={}&state={}&code_challenge={}&scope={}",
+      self.base.client_id,
+      urlencoding::encode(&self.base.redirect_uri),
+      urlencoding::encode(&state),
+      urlencoding::encode(&code_challenge),
+      self.base.scope
+    );
+
+    Oauth2URL {
+      oauth2: self.base.clone(),
+      url: Arc::new(BaseOauth2URL {
+        state,
+        code_verifier,
+        url,
+      }),
+    }
+  }
+
+  /// Creates an oauth2 URL.
+  #[must_use]
+  pub fn new_url(&self) -> Oauth2URL {
+    self.new_url_from(util::secrets64(), util::secrets64())
+  }
+
+  /// Creates an oauth2 API client from an oauth2 session.
+  #[must_use]
+  pub fn new_client(&self, session: Oauth2Session) -> Oauth2Client {
+    let base = BaseClient {
+      provider: Oauth2HttpProvider {
+        oauth2: Arc::clone(&self.base),
+        session: Arc::new(Oauth2SessionWrapper {
+          session: RwLock::new(session),
+          cancel: CancellationToken::default(),
+        }),
+      },
+    };
+    let provider = base.provider.clone();
+
+    Oauth2Client {
+      base,
+      _thread: Arc::new(task::spawn(async move {
+        let now = Utc::now();
+        let starting_delay = {
+          let session3 = provider.session.session.read().await;
+
+          session3.token_expires_at - now - Duration::seconds(5)
+        };
+
+        let delay = Duration::weeks(1) - Duration::seconds(5);
+
+        if provider.session.delay(starting_delay).await {
+          loop {
+            let _ = provider.refresh_token().await;
+
+            if !provider.session.delay(delay).await {
+              break;
+            }
+          }
+        }
+      })),
+    }
+  }
+}
+
+/// A thread-safe oauth2 API client.
+#[derive(Clone)]
+#[cfg(feature = "oauth2")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
+pub struct Oauth2Client {
+  base: BaseClient<Oauth2HttpProvider>,
+  _thread: Arc<JoinHandle<()>>,
+}
+
+#[cfg(feature = "oauth2")]
+impl Oauth2Client {
+  /// Retrieves the client's oauth2 session enclosed within a guard.
+  pub async fn get_session(&self) -> RwLockReadGuard<'_, Oauth2Session> {
+    self.base.provider.session.session.read().await
+  }
+
+  /// Whether the client's session access token has expired.
+  pub async fn has_expired(&self) -> bool {
+    self.get_session().await.has_expired()
+  }
+
+  /// Fetches the user who authorized the application.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_authorized_user(&self) -> Result<User, Error> {
+    self
+      .base
+      .send(Method::GET, api!("/users/@me"), vec![])
+      .await
+  }
+
+  /// Fetches the projects owned by the user who authorized the application.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_authorized_user_projects(&self) -> Result<Vec<UserProject>, Error> {
+    self
+      .base
+      .send(Method::GET, api!("/users/@me/projects"), vec![])
+      .await
+  }
+
+  /// Creates a draft project for the user who authorized the application. Name, icon, and missing descriptions are fetched from the platform. The project starts as a draft; the user completes the listing and submits it for review in their Top.gg dashboard.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn submit_project(&self, submission: ProjectSubmission) -> Result<(), Error> {
+    let body = serde_json::to_vec(&submission).map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(Method::POST, api!("/users/@me/projects"), body)
+      .await?;
+
+    Ok(())
+  }
+
+  /// Revokes the client's access token.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn revoke_token(&self) -> Result<(), Error> {
+    let session = self.base.provider.session.session.read().await;
+    let body = format!(
+      "client_id={}&client_secret={}&access_token={}",
+      self.oauth2.client_id,
+      self.oauth2.client_secret,
+      urlencoding::encode(&session.refresh_token)
+    )
+    .into_bytes();
+
+    drop(session);
+
+    util::request(
+      &self.oauth2.http,
+      Method::POST,
+      api!("/oauth2/revoke"),
+      None,
+      "application/x-www-form-urlencoded",
+      body,
+    )
+    .await?;
+
+    self.base.session.cancel.cancel();
+
+    Ok(())
+  }
+}
+
+#[cfg(feature = "oauth2")]
+impl Deref for Oauth2Client {
+  type Target = BaseClient<Oauth2HttpProvider>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.base
   }
 }
