@@ -55,6 +55,8 @@ async fn main() {
     .await
     .unwrap();
 
+  // Array of application commands that
+  // can be serialized to Discord API's raw JSON format.
   client
     .post_commands(serde_json::json!([
       {
