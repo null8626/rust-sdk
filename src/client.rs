@@ -136,7 +136,7 @@ impl Oauth2HttpProvider {
   async fn refresh_token(&self) -> Result<(), Error> {
     let mut session = self.session.session.write().await;
     let body = format!(
-      "grant_type=refresh_token&client_id={}&client_secret={}&access_token={}",
+      "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
       self.oauth2.client_id,
       self.oauth2.client_secret,
       urlencoding::encode(&session.refresh_token)
