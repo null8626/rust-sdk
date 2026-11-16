@@ -16,11 +16,11 @@ use hmac::{Hmac, KeyInit, Mac};
 use httpmock::{Method, MockServer};
 #[cfg(feature = "webhooks")]
 use sha2::Sha256;
-#[cfg(feature = "webhooks")]
+#[cfg(feature = "oauth2")]
 use std::time::Duration as StdDuration;
 #[cfg(feature = "api")]
 use std::{collections::HashMap, sync::Arc};
-#[cfg(feature = "webhooks")]
+#[cfg(feature = "oauth2")]
 use tokio::time::sleep;
 
 #[cfg(feature = "api")]
