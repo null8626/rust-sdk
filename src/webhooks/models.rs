@@ -3,39 +3,8 @@
 
 use super::super::{Platform, util};
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use std::collections::HashMap;
-
-#[allow(clippy::unnecessary_wraps)]
-fn deserialize_query_string<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  let Ok(query) = String::deserialize(deserializer) else {
-    return Ok(HashMap::default());
-  };
-
-  Ok(
-    query
-      .as_str()
-      .strip_prefix('?')
-      .unwrap_or(&query)
-      .split('&')
-      .filter_map(|pair| {
-        if pair.is_empty() {
-          None
-        } else {
-          let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
-
-          let key = urlencoding::decode(&k.replace('+', " ")).ok()?.into_owned();
-          let val = urlencoding::decode(&v.replace('+', " ")).ok()?.into_owned();
-
-          Some((key, val))
-        }
-      })
-      .collect(),
-  )
-}
 
 /// A project.
 #[derive(Clone, Debug, Deserialize)]
@@ -94,7 +63,7 @@ pub struct VoteCreate {
   pub user: User,
 
   /// The parsed query parameters appended to the /:id/vote page URL.
-  #[serde(default, deserialize_with = "deserialize_query_string")]
+  #[serde(default)]
   pub query: HashMap<String, String>,
 }
 

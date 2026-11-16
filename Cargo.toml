@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", optional = true }
 tokio = { version = "1.54", features = ["macros", "rt", "sync"], optional = true }
 tokio-util = { version = "0.7", optional = true }
-urlencoding = "2"
+urlencoding = { version = "2", optional = true }
 
 [dev-dependencies]
 httpmock = { version = "0.9", default-features = false, features = ["http2", "https"] }
@@ -32,7 +32,7 @@ tokio = { version = "1.54", features = ["macros", "rt"] }
 
 [features]
 default = ["api", "oauth2"]
-api = ["async-trait", "reqwest", "serde_json"]
+api = ["async-trait", "reqwest", "serde_json", "urlencoding"]
 oauth2 = ["api", "base64", "hex", "rand", "sha2", "tokio", "tokio-util"]
 webhooks = ["hex", "hmac", "sha2"]
 
