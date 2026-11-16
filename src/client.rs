@@ -1189,7 +1189,7 @@ impl Oauth2Client {
   pub async fn revoke_token(&self) -> Result<(), Error> {
     let session = self.base.provider.session.session.read().await;
     let body = format!(
-      "client_id={}&client_secret={}&access_token={}",
+      "client_id={}&client_secret={}&token={}",
       self.oauth2.client_id,
       self.oauth2.client_secret,
       urlencoding::encode(&session.refresh_token)
