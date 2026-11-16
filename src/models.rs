@@ -175,7 +175,6 @@ custom_enum_serde! {
 custom_enum_serde! {
   /// A project's type.
   #[non_exhaustive]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   pub enum ProjectType {
     /// A bot.
     Bot => bot,
@@ -192,7 +191,6 @@ custom_enum_serde! {
 custom_enum_ser! {
   /// A supported locale.
   #[non_exhaustive]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   pub enum Locale {
     /// English.
     English => en,
@@ -247,7 +245,6 @@ custom_enum_ser! {
 #[cfg(feature = "api")]
 custom_enum_ser! {
   /// An announcement category.
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   pub enum AnnouncementCategory {
     /// A generic announcement.
     Announcement => announcement,
@@ -264,7 +261,6 @@ custom_enum_ser! {
 custom_enum_ser! {
   /// A user's source platform.
   #[non_exhaustive]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   pub enum UserSource {
     /// The user came from Top.gg
     Topgg => topgg,
@@ -277,7 +273,6 @@ custom_enum_ser! {
 #[cfg(feature = "api")]
 custom_enum_de! {
   /// A project's review status.
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   pub enum ReviewStatus {
     /// The project is currently a draft.
     Draft => draft,
@@ -293,7 +288,6 @@ custom_enum_de! {
 /// A partial project.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct PartialProject {
   /// The project's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -316,7 +310,6 @@ pub struct PartialProject {
 /// A project.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct Project {
   /// The project's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -353,7 +346,6 @@ pub struct Project {
 /// A Discord bot's metrics.
 #[derive(Default, Serialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct DiscordBotMetrics {
   /// The bot's server count.
   pub server_count: Option<usize>,
@@ -365,7 +357,6 @@ pub struct DiscordBotMetrics {
 /// A Discord server's metrics.
 #[derive(Default, Serialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct DiscordServerMetrics {
   /// The server's total member count.
   pub total_member_count: Option<usize>,
@@ -377,7 +368,6 @@ pub struct DiscordServerMetrics {
 /// A Roblox game's metrics.
 #[derive(Default, Serialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct RobloxGameMetrics {
   /// The game's player count.
   pub player_count: usize,
@@ -392,7 +382,6 @@ struct RawTimestampedMetrics {
 
 /// A project's timestamped metrics.
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct TimestampedMetrics<M: Serialize> {
   data: Vec<RawTimestampedMetrics>,
   _phantom: PhantomData<M>,
@@ -451,7 +440,6 @@ where
 /// A partial vote.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct PartialVote {
   /// The vote's weight (1 normally, 2 during weekend multiplier.)
   pub weight: u8,
@@ -465,7 +453,6 @@ pub struct PartialVote {
 
 /// A vote.
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 #[derive(Deserialize)]
 pub struct Vote {
   /// The vote's weight (1 normally, 2 during weekend multiplier.)
@@ -489,7 +476,6 @@ pub struct Vote {
 /// An integration.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct Integration {
   /// The integration's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -511,7 +497,6 @@ pub struct Integration {
 /// A base webhook.
 #[cfg(feature = "api")]
 #[derive(Deserialize, Serialize)]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct BaseWebhook {
   /// The webhook's label.
   pub label: String,
@@ -523,7 +508,6 @@ pub struct BaseWebhook {
 /// A webhook.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct Webhook {
   /// The webhook's label.
   pub label: String,
@@ -539,7 +523,6 @@ pub struct Webhook {
 /// A user's platform connection.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct UserConnection {
   /// The connection's platform.
   pub platform: Platform,
@@ -605,7 +588,6 @@ pub struct ProjectSubmission {
 /// An API call result that may contain paginated data.
 #[derive(Deserialize)]
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub struct Paginated<T: DeserializeOwned> {
   pub(super) cursor: String,
 
@@ -637,7 +619,6 @@ where
 
 /// A Top.gg snowflake.
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub enum Snowflake {
   /// The snowflake's value.
   Snowflake(u64),

@@ -15,7 +15,6 @@ mod util;
 pub mod webhooks;
 
 #[cfg(feature = "api")]
-#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
 pub use client::*;
 pub use error::*;
 pub use models::*;

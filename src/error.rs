@@ -10,17 +10,14 @@ use std::ops::RangeInclusive;
 pub enum Error {
   /// Unable to send a HTTP request to the Top.gg API.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   Outgoing(reqwest::Error),
 
   /// Received a non-429 unfavorable response from the Top.gg API.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   Incoming(reqwest::Error),
 
   /// The client is being ratelimited from sending more HTTP requests to the Top.gg API.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   Ratelimited {
     /// The amount of seconds before the ratelimit is lifted.
     retry_after: u16,
@@ -28,7 +25,6 @@ pub enum Error {
 
   /// A array length was outside the expected length range.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   LengthConstraints {
     /// The actual length.
     actual: usize,
@@ -39,12 +35,10 @@ pub enum Error {
 
   /// Unable to serialize the request's JSON body.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   Serialization(serde_json::Error),
 
   /// Unable to deserialize JSON response from the Top.gg API.
   #[cfg(feature = "api")]
-  #[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
   Deserialization(serde_json::Error),
 
   /// Unable to deserialize an enum value from the Top.gg API.
