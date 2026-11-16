@@ -367,10 +367,10 @@ pub struct DiscordBotMetrics {
 #[cfg(feature = "api")]
 pub struct DiscordServerMetrics {
   /// The server's total member count.
-  pub total_member_count: Option<usize>,
+  pub member_count: Option<usize>,
 
   /// The server's online member count.
-  pub online_member_count: Option<usize>,
+  pub online_count: Option<usize>,
 }
 
 /// A Roblox game's metrics.
