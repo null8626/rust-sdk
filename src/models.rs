@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
 
-use super::Error;
 #[cfg(feature = "api")]
 use super::util;
 #[cfg(feature = "api")]
 use chrono::{DateTime, Utc};
 #[cfg(feature = "api")]
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 #[cfg(feature = "api")]
 use std::{
@@ -33,16 +32,19 @@ macro_rules! custom_enum_serde {
         $(#[$enum_prop_metas])*
         $enum_prop_name,
       )*
+
+      /// Unknown.
+      Unknown,
     }
 
     impl FromStr for $enum_name {
-      type Err = Error;
+      type Err = ();
 
       fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
           $(stringify!($enum_prop_mapping) => Ok(Self::$enum_prop_name),)*
 
-          _ => Err(Error::EnumDeserialization(value.to_string())),
+          _ => Ok(Self::Unknown),
         }
       }
     }
@@ -54,7 +56,7 @@ macro_rules! custom_enum_serde {
       {
         let value = String::deserialize(deserializer)?;
 
-        FromStr::from_str(&value).map_err(de::Error::custom)
+        Ok(FromStr::from_str(&value).unwrap())
       }
     }
 
@@ -62,6 +64,8 @@ macro_rules! custom_enum_serde {
       pub(super) const fn as_str(&self) -> &'static str {
         match self {
           $(Self::$enum_prop_name => stringify!($enum_prop_mapping),)*
+
+          Self::Unknown => "unknown",
         }
       }
     }
@@ -94,16 +98,19 @@ macro_rules! custom_enum_de {
         $(#[$enum_prop_metas])*
         $enum_prop_name,
       )*
+
+      /// Unknown.
+      Unknown,
     }
 
     impl FromStr for $enum_name {
-      type Err = Error;
+      type Err = ();
 
       fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
           $(stringify!($enum_prop_mapping) => Ok(Self::$enum_prop_name),)*
 
-          _ => Err(Error::EnumDeserialization(value.to_string())),
+          _ => Ok(Self::Unknown),
         }
       }
     }
@@ -115,7 +122,7 @@ macro_rules! custom_enum_de {
       {
         let value = String::deserialize(deserializer)?;
 
-        FromStr::from_str(&value).map_err(de::Error::custom)
+        Ok(FromStr::from_str(&value).unwrap())
       }
     }
   };
@@ -161,7 +168,6 @@ macro_rules! custom_enum_ser {
 
 custom_enum_serde! {
   /// A project's platform.
-  #[non_exhaustive]
   #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
   pub enum Platform {
     /// Discord.
@@ -175,7 +181,6 @@ custom_enum_serde! {
 #[cfg(feature = "api")]
 custom_enum_serde! {
   /// A project's type.
-  #[non_exhaustive]
   #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
   pub enum ProjectType {
     /// A bot.
