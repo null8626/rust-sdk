@@ -9,9 +9,9 @@ use super::{
 use super::{ProjectSubmission, User, UserProject};
 #[cfg(feature = "oauth2")]
 use base64::engine::{Engine, general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
 #[cfg(feature = "oauth2")]
 use chrono::Duration;
-use chrono::{DateTime, Utc};
 #[cfg(test)]
 use httpmock::MockServer;
 use reqwest::{Client as HttpClient, IntoUrl, Method, Response};
@@ -53,9 +53,11 @@ macro_rules! api {
 }
 
 #[cfg(not(test))]
+#[cfg(feature = "oauth2")]
 const REFRESH_INTERVAL: Duration = Duration::weeks(1);
 
 #[cfg(test)]
+#[cfg(feature = "oauth2")]
 const REFRESH_INTERVAL: Duration = Duration::milliseconds(5500);
 
 #[doc(hidden)]
