@@ -21,11 +21,11 @@ pub fn verify(secret: &str, signature: &str, body: &str) -> bool {
   let (Some(timestamp), Some(signature)) = (
     timestamp_pair
       .find('=')
-      .and_then(|index| timestamp_pair.get(index..))
+      .and_then(|index| timestamp_pair.get(index + 1..))
       .and_then(|timestamp| timestamp.parse::<i64>().ok()),
     signature_pair
       .find('=')
-      .and_then(|index| timestamp_pair.get(index..)),
+      .and_then(|index| signature_pair.get(index + 1..)),
   ) else {
     return false;
   };
@@ -34,10 +34,13 @@ pub fn verify(secret: &str, signature: &str, body: &str) -> bool {
     return false;
   }
 
-  let Ok(mut hmac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else {
+  let (Ok(decoded_signature), Ok(mut hmac)) = (
+    hex::decode(signature),
+    Hmac::<Sha256>::new_from_slice(secret.as_bytes()),
+  ) else {
     return false;
   };
 
   hmac.update(format!("{timestamp}.{body}").as_bytes());
-  hmac.verify_slice(signature.as_bytes()).is_ok()
+  hmac.verify_slice(&decoded_signature).is_ok()
 }

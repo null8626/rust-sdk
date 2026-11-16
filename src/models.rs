@@ -12,7 +12,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::str::FromStr;
 #[cfg(feature = "api")]
 use std::{
-  fmt::{self, Display, Formatter},
+  fmt::{self, Debug, Display, Formatter},
   marker::PhantomData,
   ops::{Deref, DerefMut},
 };
@@ -162,6 +162,7 @@ macro_rules! custom_enum_ser {
 custom_enum_serde! {
   /// A project's platform.
   #[non_exhaustive]
+  #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
   pub enum Platform {
     /// Discord.
     Discord => discord,
@@ -175,6 +176,7 @@ custom_enum_serde! {
 custom_enum_serde! {
   /// A project's type.
   #[non_exhaustive]
+  #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
   pub enum ProjectType {
     /// A bot.
     Bot => bot,
@@ -191,6 +193,7 @@ custom_enum_serde! {
 custom_enum_ser! {
   /// A supported locale.
   #[non_exhaustive]
+  #[derive(Copy, Clone, Eq, Hash, PartialEq)]
   pub enum Locale {
     /// English.
     English => en,
@@ -245,6 +248,7 @@ custom_enum_ser! {
 #[cfg(feature = "api")]
 custom_enum_ser! {
   /// An announcement category.
+  #[derive(Copy, Clone, Eq, Hash, PartialEq)]
   pub enum AnnouncementCategory {
     /// A generic announcement.
     Announcement => announcement,
@@ -261,6 +265,7 @@ custom_enum_ser! {
 custom_enum_ser! {
   /// A user's source platform.
   #[non_exhaustive]
+  #[derive(Copy, Clone, Eq, Hash, PartialEq)]
   pub enum UserSource {
     /// The user came from Top.gg
     Topgg => topgg,
@@ -273,6 +278,7 @@ custom_enum_ser! {
 #[cfg(feature = "api")]
 custom_enum_de! {
   /// A project's review status.
+  #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
   pub enum ReviewStatus {
     /// The project is currently a draft.
     Draft => draft,
@@ -286,8 +292,8 @@ custom_enum_de! {
 }
 
 /// A partial project.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct PartialProject {
   /// The project's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -308,8 +314,8 @@ pub struct PartialProject {
 }
 
 /// A project.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Project {
   /// The project's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -331,9 +337,11 @@ pub struct Project {
   pub tags: Vec<String>,
 
   /// The project's current vote count.
+  #[serde(rename = "votes")]
   pub current_votes: usize,
 
   /// The project's vote count.
+  #[serde(rename = "votes_total")]
   pub total_votes: usize,
 
   /// The project's review score.
@@ -344,7 +352,7 @@ pub struct Project {
 }
 
 /// A Discord bot's metrics.
-#[derive(Default, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize)]
 #[cfg(feature = "api")]
 pub struct DiscordBotMetrics {
   /// The bot's server count.
@@ -355,7 +363,7 @@ pub struct DiscordBotMetrics {
 }
 
 /// A Discord server's metrics.
-#[derive(Default, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize)]
 #[cfg(feature = "api")]
 pub struct DiscordServerMetrics {
   /// The server's total member count.
@@ -366,15 +374,15 @@ pub struct DiscordServerMetrics {
 }
 
 /// A Roblox game's metrics.
-#[derive(Default, Serialize)]
+#[derive(Copy, Clone, Debug, Default, Serialize)]
 #[cfg(feature = "api")]
 pub struct RobloxGameMetrics {
   /// The game's player count.
   pub player_count: usize,
 }
 
-#[derive(Serialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Serialize)]
 struct RawTimestampedMetrics {
   timestamp: DateTime<Utc>,
   metrics: serde_json::Value,
@@ -382,7 +390,8 @@ struct RawTimestampedMetrics {
 
 /// A project's timestamped metrics.
 #[cfg(feature = "api")]
-pub struct TimestampedMetrics<M: Serialize> {
+#[derive(Clone)]
+pub struct TimestampedMetrics<M: Clone + Debug + Default + Serialize> {
   data: Vec<RawTimestampedMetrics>,
   _phantom: PhantomData<M>,
 }
@@ -390,7 +399,7 @@ pub struct TimestampedMetrics<M: Serialize> {
 #[cfg(feature = "api")]
 impl<M> TimestampedMetrics<M>
 where
-  M: Serialize,
+  M: Clone + Debug + Default + Serialize,
 {
   /// Inserts a new timestamped metrics entry.
   ///
@@ -425,9 +434,22 @@ where
 }
 
 #[cfg(feature = "api")]
+impl<M> Default for TimestampedMetrics<M>
+where
+  M: Clone + Debug + Default + Serialize,
+{
+  fn default() -> Self {
+    Self {
+      data: vec![],
+      _phantom: PhantomData,
+    }
+  }
+}
+
+#[cfg(feature = "api")]
 impl<M> Serialize for TimestampedMetrics<M>
 where
-  M: Serialize,
+  M: Clone + Debug + Default + Serialize,
 {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
@@ -438,8 +460,8 @@ where
 }
 
 /// A partial vote.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct PartialVote {
   /// The vote's weight (1 normally, 2 during weekend multiplier.)
   pub weight: u8,
@@ -453,7 +475,7 @@ pub struct PartialVote {
 
 /// A vote.
 #[cfg(feature = "api")]
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Vote {
   /// The vote's weight (1 normally, 2 during weekend multiplier.)
   pub weight: u8,
@@ -474,8 +496,8 @@ pub struct Vote {
 }
 
 /// An integration.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Integration {
   /// The integration's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -496,7 +518,7 @@ pub struct Integration {
 
 /// A base webhook.
 #[cfg(feature = "api")]
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BaseWebhook {
   /// The webhook's label.
   pub label: String,
@@ -506,8 +528,8 @@ pub struct BaseWebhook {
 }
 
 /// A webhook.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Webhook {
   /// The webhook's label.
   pub label: String,
@@ -521,8 +543,8 @@ pub struct Webhook {
 }
 
 /// A user's platform connection.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct UserConnection {
   /// The connection's platform.
   pub platform: Platform,
@@ -533,8 +555,8 @@ pub struct UserConnection {
 }
 
 /// A user.
-#[derive(Deserialize)]
 #[cfg(feature = "oauth2")]
+#[derive(Clone, Debug, Deserialize)]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct User {
   /// The user's Top.gg ID.
@@ -545,6 +567,7 @@ pub struct User {
   pub username: String,
 
   /// The user's avatar URL.
+  #[serde(default)]
   pub avatar: Option<String>,
 
   /// The user's platform connections.
@@ -552,8 +575,8 @@ pub struct User {
 }
 
 /// A user's project.
-#[derive(Deserialize)]
 #[cfg(feature = "oauth2")]
+#[derive(Clone, Debug, Deserialize)]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct UserProject {
   /// The project's headline.
@@ -564,7 +587,7 @@ pub struct UserProject {
 }
 
 /// A project submission.
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[cfg(feature = "oauth2")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct ProjectSubmission {
@@ -586,13 +609,26 @@ pub struct ProjectSubmission {
 }
 
 /// An API call result that may contain paginated data.
-#[derive(Deserialize)]
 #[cfg(feature = "api")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Paginated<T: DeserializeOwned> {
-  pub(super) cursor: String,
+  #[serde(default)]
+  pub(super) cursor: Option<String>,
 
   #[serde(alias = "projects")]
   data: Vec<T>,
+}
+
+#[cfg(feature = "api")]
+impl<T> Paginated<T>
+where
+  T: DeserializeOwned,
+{
+  /// Whether this is the last page.
+  #[must_use]
+  pub const fn is_last(&self) -> bool {
+    self.cursor.is_none()
+  }
 }
 
 #[cfg(feature = "api")]
@@ -619,6 +655,7 @@ where
 
 /// A Top.gg snowflake.
 #[cfg(feature = "api")]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Snowflake {
   /// The snowflake's value.
   Snowflake(u64),
@@ -651,7 +688,7 @@ impl FromStr for Snowflake {
 impl Display for Snowflake {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     match self {
-      Self::Snowflake(value) => value.fmt(f),
+      Self::Snowflake(value) => Display::fmt(value, f),
 
       Self::Me => f.write_str("@me"),
     }

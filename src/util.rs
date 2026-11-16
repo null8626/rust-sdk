@@ -14,6 +14,22 @@ use serde::{Deserialize, Deserializer, de};
 use std::ops::RangeInclusive;
 
 #[cfg(feature = "api")]
+pub fn http_client() -> HttpClient {
+  #[cfg(not(test))]
+  {
+    HttpClient::default()
+  }
+
+  #[cfg(test)]
+  {
+    HttpClient::builder()
+      .add_root_certificate(reqwest::Certificate::from_pem(include_bytes!("mocks/ca.pem")).unwrap())
+      .build()
+      .unwrap()
+  }
+}
+
+#[cfg(feature = "api")]
 pub async fn request(
   http: &HttpClient,
   method: Method,

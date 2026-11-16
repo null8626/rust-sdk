@@ -38,7 +38,7 @@ where
 }
 
 /// A project.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Project {
   /// The project's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -53,7 +53,7 @@ pub struct Project {
 }
 
 /// A user.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct User {
   /// The user's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -72,7 +72,7 @@ pub struct User {
 }
 
 /// A vote.create webhook payload. Top.gg fires this event each time a user upvotes your project. Use it to reward voters, update leaderboards, or log activity.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct VoteCreate {
   /// The vote's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -94,12 +94,12 @@ pub struct VoteCreate {
   pub user: User,
 
   /// The parsed query parameters appended to the /:id/vote page URL.
-  #[serde(deserialize_with = "deserialize_query_string")]
+  #[serde(default, deserialize_with = "deserialize_query_string")]
   pub query: HashMap<String, String>,
 }
 
 /// A webhook.test webhook payload. This event is always available and lets you verify your endpoint is reachable before real votes arrive. Send a test from your project's Webhooks page in the dashboard.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Test {
   /// The voted project.
   pub project: Project,
@@ -109,7 +109,7 @@ pub struct Test {
 }
 
 /// A integration.create webhook payload that fires when a user visits your integration page on Top.gg and clicks the Connect button.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct IntegrationCreate {
   /// The connection's Top.gg ID. Store this to track and delete.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -126,7 +126,7 @@ pub struct IntegrationCreate {
 }
 
 /// A integration.delete webhook payload that fires when a user removes the managed webhook from their dashboard.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct IntegrationDelete {
   /// The connection's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
@@ -134,7 +134,7 @@ pub struct IntegrationDelete {
 }
 
 /// A webhook payload.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Payload {
   /// A vote.create webhook payload. Top.gg fires this event each time a user upvotes your project. Use it to reward voters, update leaderboards, or log activity.

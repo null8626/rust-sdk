@@ -12,13 +12,15 @@ use base64::engine::{Engine, general_purpose::URL_SAFE_NO_PAD};
 #[cfg(feature = "oauth2")]
 use chrono::Duration;
 use chrono::{DateTime, Utc};
+#[cfg(test)]
+use httpmock::MockServer;
 use reqwest::{Client as HttpClient, IntoUrl, Method, Response};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 #[cfg(feature = "oauth2")]
 use sha2::{Digest, Sha256};
-#[cfg(feature = "oauth2")]
+#[cfg(any(test, feature = "oauth2"))]
 use std::sync::Arc;
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, fmt::Debug, ops::Deref};
 #[cfg(feature = "oauth2")]
 use tokio::{
   sync::{RwLock, RwLockReadGuard},
@@ -28,15 +30,33 @@ use tokio::{
 #[cfg(feature = "oauth2")]
 use tokio_util::sync::CancellationToken;
 
+#[cfg(not(test))]
 macro_rules! api {
-  ($e:literal) => {
+  ($server:expr, $e:literal) => {
     concat!("https://top.gg/api/v1", $e)
   };
 
-  ($e:literal, $($rest:tt)*) => {
-    format!(api!($e), $($rest)*)
+  ($server:expr, $e:literal, $($rest:tt)*) => {
+    format!(api!($server, $e), $($rest)*)
   };
 }
+
+#[cfg(test)]
+macro_rules! api {
+  ($server:expr, $e:literal) => {
+    $server.url($e)
+  };
+
+  ($server:expr, $e:literal, $($rest:tt)*) => {
+    $server.url(format!($e, $($rest)*))
+  };
+}
+
+#[cfg(not(test))]
+const REFRESH_INTERVAL: Duration = Duration::weeks(1);
+
+#[cfg(test)]
+const REFRESH_INTERVAL: Duration = Duration::milliseconds(5500);
 
 #[doc(hidden)]
 #[cfg(not(feature = "oauth2"))]
@@ -90,9 +110,7 @@ impl HttpProvider for DirectHttpProvider {
     }
 
     #[cfg(not(feature = "oauth2"))]
-    {
-      &self.token
-    }
+    &self.token
   }
 
   fn get_http(&self) -> &HttpClient {
@@ -106,6 +124,8 @@ impl HttpProvider for DirectHttpProvider {
 pub struct Oauth2HttpProvider {
   oauth2: Arc<BaseOauth2>,
   session: Arc<Oauth2SessionWrapper>,
+  #[cfg(test)]
+  server: Arc<MockServer>,
 }
 
 #[cfg(feature = "oauth2")]
@@ -124,7 +144,7 @@ impl Oauth2HttpProvider {
     let response = util::request(
       &self.oauth2.http,
       Method::POST,
-      api!("/oauth2/token"),
+      api!(self.server, "/oauth2/token"),
       None,
       "application/x-www-form-urlencoded",
       body,
@@ -160,21 +180,24 @@ impl HttpProvider for Oauth2HttpProvider {
 }
 
 #[derive(Serialize)]
-struct EditProject {
-  headline: HashMap<Locale, String>,
-  page_content: HashMap<Locale, String>,
+#[allow(clippy::redundant_pub_crate)]
+pub(super) struct EditProject {
+  pub(super) headline: HashMap<Locale, String>,
+  pub(super) page_content: HashMap<Locale, String>,
 }
 
 #[derive(Serialize)]
-struct PostAnnouncement {
-  title: String,
-  content: String,
-  category: AnnouncementCategory,
+#[allow(clippy::redundant_pub_crate)]
+pub(super) struct PostAnnouncement {
+  pub(super) title: String,
+  pub(super) content: String,
+  pub(super) category: AnnouncementCategory,
 }
 
 #[derive(Serialize)]
-struct PostTimestampedMetrics<M: Serialize> {
-  data: TimestampedMetrics<M>,
+#[allow(clippy::redundant_pub_crate)]
+pub(super) struct PostTimestampedMetrics<M: Clone + Debug + Default + Serialize> {
+  pub(super) data: TimestampedMetrics<M>,
 }
 
 #[derive(Deserialize)]
@@ -185,6 +208,8 @@ struct RotateWebhookSecret {
 /// A base API client.
 pub struct BaseClient<P> {
   provider: P,
+  #[cfg(test)]
+  server: Arc<MockServer>,
 }
 
 impl<P> BaseClient<P>
@@ -223,22 +248,28 @@ where
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_projects(&self) -> Result<Paginated<PartialProject>, Error> {
-    self.send(Method::GET, api!("/projects"), vec![]).await
+    self
+      .send(Method::GET, api!(self.server, "/projects"), vec![])
+      .await
   }
 
   /// Fetches the projects the current credential covers after a previously returned paginated list.
   ///
   /// # Errors
   ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  /// If [`Paginated::is_last`] is `true`, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn get_projects_after(
     &self,
     reference: &Paginated<PartialProject>,
   ) -> Result<Paginated<PartialProject>, Error> {
+    let Some(cursor) = &reference.cursor else {
+      return Err(Error::LastPage);
+    };
+
     self
       .send(
         Method::GET,
-        api!("/projects?cursor={}", reference.cursor),
+        api!(self.server, "/projects?cursor={}", cursor),
         vec![],
       )
       .await
@@ -251,7 +282,11 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_project(&self, id: impl Into<Snowflake>) -> Result<Project, Error> {
     self
-      .send(Method::GET, api!("/projects/{}", id.into()), vec![])
+      .send(
+        Method::GET,
+        api!(self.server, "/projects/{}", id.into()),
+        vec![],
+      )
       .await
   }
 
@@ -281,7 +316,11 @@ where
     .map_err(Error::Serialization)?;
 
     self
-      .send_inner(Method::PATCH, api!("/projects/{}", id.into()), body)
+      .send_inner(
+        Method::PATCH,
+        api!(self.server, "/projects/{}", id.into()),
+        body,
+      )
       .await?;
 
     Ok(())
@@ -312,7 +351,7 @@ where
     self
       .send_inner(
         Method::POST,
-        api!("/projects/{}/announcements", id.into()),
+        api!(self.server, "/projects/{}/announcements", id.into()),
         body,
       )
       .await?;
@@ -332,7 +371,11 @@ where
     let body = serde_json::to_vec(&metrics).map_err(Error::Serialization)?;
 
     self
-      .send_inner(Method::PATCH, api!("/projects/{}/metrics", id.into()), body)
+      .send_inner(
+        Method::PATCH,
+        api!(self.server, "/projects/{}/metrics", id.into()),
+        body,
+      )
       .await?;
 
     Ok(())
@@ -349,7 +392,7 @@ where
     metrics: TimestampedMetrics<M>,
   ) -> Result<(), Error>
   where
-    M: Serialize,
+    M: Clone + Debug + Default + Serialize,
   {
     util::enforce_constraints(metrics.len(), 1..=100)?;
 
@@ -359,7 +402,7 @@ where
     self
       .send_inner(
         Method::POST,
-        api!("/projects/{}/metrics/batch", id.into()),
+        api!(self.server, "/projects/{}/metrics/batch", id.into()),
         body,
       )
       .await?;
@@ -379,7 +422,11 @@ where
     let body = serde_json::to_vec(&commands).map_err(Error::Serialization)?;
 
     self
-      .send_inner(Method::PUT, api!("/projects/{}/commands", id.into()), body)
+      .send_inner(
+        Method::PUT,
+        api!(self.server, "/projects/{}/commands", id.into()),
+        body,
+      )
       .await?;
 
     Ok(())
@@ -399,6 +446,7 @@ where
       .send(
         Method::GET,
         api!(
+          self.server,
           "/projects/{}/votes?startDate={}",
           id.into(),
           urlencoding::encode(&since.to_rfc3339())
@@ -412,16 +460,25 @@ where
   ///
   /// # Errors
   ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  /// If [`Paginated::is_last`] is `true`, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn get_votes_after(
     &self,
     id: impl Into<Snowflake>,
     reference: &Paginated<Vote>,
   ) -> Result<Paginated<Vote>, Error> {
+    let Some(cursor) = &reference.cursor else {
+      return Err(Error::LastPage);
+    };
+
     self
       .send(
         Method::GET,
-        api!("/projects/{}/votes?cursor={}", id.into(), reference.cursor),
+        api!(
+          self.server,
+          "/projects/{}/votes?cursor={}",
+          id.into(),
+          cursor
+        ),
         vec![],
       )
       .await
@@ -442,6 +499,7 @@ where
       .send(
         Method::GET,
         api!(
+          self.server,
           "/projects/{}/votes/{}?source={}",
           id.into(),
           user_id.into(),
@@ -464,7 +522,7 @@ where
     self
       .send(
         Method::GET,
-        api!("/projects/{}/integrations", id.into()),
+        api!(self.server, "/projects/{}/integrations", id.into()),
         vec![],
       )
       .await
@@ -484,6 +542,7 @@ where
       .send_inner(
         Method::PUT,
         api!(
+          self.server,
           "/projects/{}/integrations/{}",
           project_id.into(),
           integration_id
@@ -509,6 +568,7 @@ where
       .send_inner(
         Method::DELETE,
         api!(
+          self.server,
           "/projects/{}/integrations/{}",
           project_id.into(),
           integration_id,
@@ -529,7 +589,7 @@ where
     self
       .send(
         Method::GET,
-        api!("/projects/{}/webhooks", id.into()),
+        api!(self.server, "/projects/{}/webhooks", id.into()),
         vec![],
       )
       .await
@@ -548,7 +608,11 @@ where
     let body = serde_json::to_vec(&webhook).map_err(Error::Serialization)?;
 
     self
-      .send(Method::POST, api!("/projects/{}/webhooks", id.into()), body)
+      .send(
+        Method::POST,
+        api!(self.server, "/projects/{}/webhooks", id.into()),
+        body,
+      )
       .await
   }
 
@@ -565,7 +629,12 @@ where
     self
       .send_inner(
         Method::DELETE,
-        api!("/projects/{}/webhooks/{}", project_id.into(), webhook_id),
+        api!(
+          self.server,
+          "/projects/{}/webhooks/{}",
+          project_id.into(),
+          webhook_id
+        ),
         vec![],
       )
       .await?;
@@ -587,6 +656,7 @@ where
       .send(
         Method::POST,
         api!(
+          self.server,
           "/projects/{}/webhooks/{}/rotate",
           project_id.into(),
           webhook_id
@@ -612,6 +682,7 @@ where
       .send_inner(
         Method::POST,
         api!(
+          self.server,
           "/projects/{}/webhooks/{}/test",
           project_id.into(),
           webhook_id
@@ -631,6 +702,8 @@ where
   fn clone(&self) -> Self {
     Self {
       provider: self.provider.clone(),
+      #[cfg(test)]
+      server: self.server.clone(),
     }
   }
 }
@@ -651,13 +724,15 @@ pub struct Client {
 impl Client {
   /// Creates the client.
   #[must_use]
-  pub fn new(token: String) -> Self {
+  pub fn new(token: String, #[cfg(test)] server: Arc<MockServer>) -> Self {
     Self {
       base: BaseClient {
         provider: DirectHttpProvider {
           token,
-          http: HttpClient::default(),
+          http: util::http_client(),
         },
+        #[cfg(test)]
+        server,
       },
     }
   }
@@ -726,7 +801,7 @@ impl Client {
     metrics: TimestampedMetrics<M>,
   ) -> Result<(), Error>
   where
-    M: Serialize,
+    M: Clone + Debug + Default + Serialize,
   {
     self
       .base
@@ -791,12 +866,12 @@ impl Deref for Client {
 
 #[cfg(feature = "oauth2")]
 fn default_token_expires_at() -> DateTime<Utc> {
-  Utc::now() + Duration::weeks(1)
+  Utc::now() + REFRESH_INTERVAL
 }
 
 /// An oauth2 session.
-#[derive(Deserialize)]
 #[cfg(feature = "oauth2")]
+#[derive(Debug, Deserialize)]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct Oauth2Session {
   /// The session's access token.
@@ -896,7 +971,7 @@ impl Oauth2URL {
     let response = util::request(
       &self.oauth2.http,
       Method::POST,
-      api!("/oauth2/token"),
+      api!(self.oauth2.server, "/oauth2/token"),
       None,
       "application/x-www-form-urlencoded",
       body,
@@ -918,6 +993,8 @@ struct BaseOauth2 {
   redirect_uri: String,
   scope: String,
   http: HttpClient,
+  #[cfg(test)]
+  server: Arc<MockServer>,
 }
 
 /// A thread-safe oauth2 manager.
@@ -932,14 +1009,22 @@ pub struct Oauth2 {
 impl Oauth2 {
   /// Creates the manager.
   #[must_use]
-  pub fn new(client_id: u64, client_secret: String, redirect_uri: String, scopes: &[&str]) -> Self {
+  pub fn new(
+    client_id: u64,
+    client_secret: String,
+    redirect_uri: String,
+    scopes: &[&str],
+    #[cfg(test)] server: Arc<MockServer>,
+  ) -> Self {
     Self {
       base: Arc::new(BaseOauth2 {
         client_id,
         client_secret,
         redirect_uri,
         scope: scopes.join("+"),
-        http: HttpClient::default(),
+        http: util::http_client(),
+        #[cfg(test)]
+        server,
       }),
     }
   }
@@ -976,7 +1061,11 @@ impl Oauth2 {
 
   /// Creates an oauth2 API client from an oauth2 session.
   #[must_use]
-  pub fn new_client(&self, session: Oauth2Session) -> Oauth2Client {
+  pub fn new_client(
+    &self,
+    session: Oauth2Session,
+    #[cfg(test)] server: Arc<MockServer>,
+  ) -> Oauth2Client {
     let base = BaseClient {
       provider: Oauth2HttpProvider {
         oauth2: Arc::clone(&self.base),
@@ -984,7 +1073,11 @@ impl Oauth2 {
           session: RwLock::new(session),
           cancel: CancellationToken::default(),
         }),
+        #[cfg(test)]
+        server: server.clone(),
       },
+      #[cfg(test)]
+      server,
     };
     let provider = base.provider.clone();
 
@@ -998,7 +1091,7 @@ impl Oauth2 {
           session3.token_expires_at - now - Duration::seconds(5)
         };
 
-        let delay = Duration::weeks(1) - Duration::seconds(5);
+        let delay = REFRESH_INTERVAL - Duration::seconds(5);
 
         if provider.session.delay(starting_delay).await {
           loop {
@@ -1043,7 +1136,7 @@ impl Oauth2Client {
   pub async fn get_authorized_user(&self) -> Result<User, Error> {
     self
       .base
-      .send(Method::GET, api!("/users/@me"), vec![])
+      .send(Method::GET, api!(self.base.server, "/users/@me"), vec![])
       .await
   }
 
@@ -1055,7 +1148,11 @@ impl Oauth2Client {
   pub async fn get_authorized_user_projects(&self) -> Result<Vec<UserProject>, Error> {
     self
       .base
-      .send(Method::GET, api!("/users/@me/projects"), vec![])
+      .send(
+        Method::GET,
+        api!(self.base.server, "/users/@me/projects"),
+        vec![],
+      )
       .await
   }
 
@@ -1063,13 +1160,20 @@ impl Oauth2Client {
   ///
   /// # Errors
   ///
-  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn submit_project(&self, submission: ProjectSubmission) -> Result<(), Error> {
+    util::enforce_constraints(submission.headline.len(), 3..=140)?;
+    util::enforce_constraints(submission.page_content.len(), 300..=50000)?;
+
     let body = serde_json::to_vec(&submission).map_err(Error::Serialization)?;
 
     self
       .base
-      .send_inner(Method::POST, api!("/users/@me/projects"), body)
+      .send_inner(
+        Method::POST,
+        api!(self.base.server, "/users/@me/projects"),
+        body,
+      )
       .await?;
 
     Ok(())
@@ -1095,7 +1199,7 @@ impl Oauth2Client {
     util::request(
       &self.oauth2.http,
       Method::POST,
-      api!("/oauth2/revoke"),
+      api!(self.base.server, "/oauth2/revoke"),
       None,
       "application/x-www-form-urlencoded",
       body,

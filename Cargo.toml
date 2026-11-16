@@ -9,7 +9,7 @@ repository = "https://github.com/Top-gg-Community/rust-sdk"
 license = "MIT"
 keywords = ["discord", "bot", "topgg"]
 categories = ["api-bindings", "web-programming::http-client"]
-exclude = [".gitattributes", ".gitignore", "rustfmt.toml"]
+exclude = [".gitattributes", ".gitignore", "rustfmt.toml", "src/mocks"]
 
 [dependencies]
 async-trait = { version = "0.1", optional = true }
@@ -26,11 +26,15 @@ tokio = { version = "1.54", features = ["macros", "rt", "sync"], optional = true
 tokio-util = { version = "0.7", optional = true }
 urlencoding = "2"
 
+[dev-dependencies]
+httpmock = { version = "0.9", default-features = false, features = ["http2", "https"] }
+tokio = { version = "1.54", features = ["macros", "rt"] }
+
 [features]
-default = ["api", "oauth2"]
+default = ["api", "oauth2", "webhooks"]
 api = ["async-trait", "reqwest", "serde_json"]
 oauth2 = ["api", "base64", "hex", "rand", "sha2", "tokio", "tokio-util"]
-webhooks = ["hmac", "sha2"]
+webhooks = ["hex", "hmac", "sha2"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(doc_cfg)"] }
@@ -40,6 +44,7 @@ all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 trait_duplication_in_bounds = "allow"
+unreadable_literal = "allow"
 
 [package.metadata.docs.rs]
 all-features = true

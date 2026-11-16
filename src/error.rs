@@ -43,6 +43,10 @@ pub enum Error {
 
   /// Unable to deserialize an enum value from the Top.gg API.
   EnumDeserialization(String),
+
+  /// Attempted to traverse to the next page when [`Paginated::is_last`][super::models::Paginated::is_last] is `true`.
+  #[cfg(feature = "api")]
+  LastPage,
 }
 
 impl Display for Error {
@@ -87,6 +91,11 @@ impl Display for Error {
         f,
         "Unable to deserialize an enum value from the Top.gg API: '{value}'"
       ),
+
+      #[cfg(feature = "api")]
+      Self::LastPage => {
+        f.write_str("Attempted to traverse to the next page when Paginated::is_last is true.")
+      }
     }
   }
 }

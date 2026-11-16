@@ -7,6 +7,8 @@
 mod client;
 mod error;
 mod models;
+#[cfg(test)]
+mod tests;
 mod util;
 
 /// Webhooks structs and functions.
