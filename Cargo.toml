@@ -31,7 +31,7 @@ httpmock = { version = "0.9", default-features = false, features = ["http2", "ht
 tokio = { version = "1.54", features = ["macros", "rt"] }
 
 [features]
-default = ["api", "oauth2", "webhooks"]
+default = ["api", "oauth2"]
 api = ["async-trait", "reqwest", "serde_json"]
 oauth2 = ["api", "base64", "hex", "rand", "sha2", "tokio", "tokio-util"]
 webhooks = ["hex", "hmac", "sha2"]
