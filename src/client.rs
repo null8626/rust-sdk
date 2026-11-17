@@ -15,6 +15,8 @@ use chrono::{DateTime, Utc};
 #[cfg(test)]
 use httpmock::MockServer;
 use reqwest::{Client as HttpClient, IntoUrl, Method, Response};
+#[cfg(feature = "oauth2")]
+use serde::Deserializer;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 #[cfg(feature = "oauth2")]
 use sha2::{Digest, Sha256};
@@ -22,13 +24,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::{collections::HashMap, fmt::Debug, ops::Deref};
 #[cfg(feature = "oauth2")]
-use tokio::{
-  sync::{RwLock, RwLockReadGuard},
-  task::{self, JoinHandle},
-  time::sleep,
-};
-#[cfg(feature = "oauth2")]
-use tokio_util::sync::CancellationToken;
+use tokio::sync::{RwLock, RwLockReadGuard};
 
 #[cfg(not(test))]
 macro_rules! api {
@@ -51,14 +47,6 @@ macro_rules! api {
     $server.url(format!($e, $($rest)*))
   };
 }
-
-#[cfg(not(test))]
-#[cfg(feature = "oauth2")]
-const REFRESH_INTERVAL: Duration = Duration::weeks(1);
-
-#[cfg(test)]
-#[cfg(feature = "oauth2")]
-const REFRESH_INTERVAL: Duration = Duration::milliseconds(5500);
 
 #[doc(hidden)]
 #[cfg(not(feature = "oauth2"))]
@@ -90,6 +78,11 @@ impl Deref for TokenGuard<'_> {
 #[doc(hidden)]
 #[async_trait::async_trait]
 pub trait HttpProvider: Sync {
+  /// Ensures that the current session is ready for an HTTP request.
+  async fn ensure_session(&self) -> Result<(), Error> {
+    Ok(())
+  }
+
   /// Retrieves the client's token.
   async fn get_token(&self) -> TokenGuard<'_>;
 
@@ -125,16 +118,22 @@ impl HttpProvider for DirectHttpProvider {
 #[cfg(feature = "oauth2")]
 pub struct Oauth2HttpProvider {
   oauth2: Arc<BaseOauth2>,
-  session: Arc<Oauth2SessionWrapper>,
+  session: Arc<RwLock<Oauth2Session>>,
   #[cfg(test)]
   server: Arc<MockServer>,
 }
 
 #[cfg(feature = "oauth2")]
-impl Oauth2HttpProvider {
+#[async_trait::async_trait]
+impl HttpProvider for Oauth2HttpProvider {
   #[allow(clippy::significant_drop_tightening)]
-  async fn refresh_token(&self) -> Result<(), Error> {
-    let mut session = self.session.session.write().await;
+  async fn ensure_session(&self) -> Result<(), Error> {
+    let mut session = self.session.write().await;
+
+    if !session.has_expired() {
+      return Ok(());
+    }
+
     let body = format!(
       "grant_type=refresh_token&client_id={}&client_secret={}&refresh_token={}",
       self.oauth2.client_id,
@@ -167,13 +166,9 @@ impl Oauth2HttpProvider {
       Err(error) => Err(Error::ReadBody(error)),
     }
   }
-}
 
-#[cfg(feature = "oauth2")]
-#[async_trait::async_trait]
-impl HttpProvider for Oauth2HttpProvider {
   async fn get_token(&self) -> TokenGuard<'_> {
-    TokenGuard::Guard(self.session.session.read().await)
+    TokenGuard::Guard(self.session.read().await)
   }
 
   fn get_http(&self) -> &HttpClient {
@@ -207,8 +202,7 @@ struct RotateWebhookSecret {
   secret: String,
 }
 
-/// A base API client.
-pub struct BaseClient<P> {
+struct BaseClient<P> {
   provider: P,
   #[cfg(test)]
   server: Arc<MockServer>,
@@ -226,6 +220,9 @@ where
     body: Vec<u8>,
   ) -> Result<Response, Error> {
     let http = self.provider.get_http();
+
+    self.provider.ensure_session().await?;
+
     let token = self.provider.get_token().await;
 
     util::request(http, method, url, Some(&*token), "application/json", body).await
@@ -243,6 +240,304 @@ where
       Err(error) => Err(Error::ReadBody(error)),
     }
   }
+}
+
+impl<P> Clone for BaseClient<P>
+where
+  P: HttpProvider + Clone,
+{
+  fn clone(&self) -> Self {
+    Self {
+      provider: self.provider.clone(),
+      #[cfg(test)]
+      server: self.server.clone(),
+    }
+  }
+}
+
+/// An API client using a project token.
+pub struct ProjectClient {
+  base: BaseClient<DirectHttpProvider>,
+}
+
+impl ProjectClient {
+  /// Creates the client.
+  #[must_use]
+  pub fn new(token: String, #[cfg(test)] server: Arc<MockServer>) -> Self {
+    Self {
+      base: BaseClient {
+        provider: DirectHttpProvider {
+          token,
+          http: util::http_client(),
+        },
+        #[cfg(test)]
+        server,
+      },
+    }
+  }
+
+  /// Fetches a project associated with the current token.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_project(&self) -> Result<Project, Error> {
+    self
+      .base
+      .send(Method::GET, api!(self.base.server, "/projects/@me"), vec![])
+      .await
+  }
+
+  /// Updates the headline and/or page content for a project. Both fields are locale-keyed, so you can set content for multiple languages in a single request.
+  ///
+  /// # Errors
+  ///
+  /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn edit_project(
+    &self,
+    headline: HashMap<Locale, String>,
+    page_content: HashMap<Locale, String>,
+  ) -> Result<(), Error> {
+    for value in headline.values() {
+      util::enforce_constraints(value.len(), 3..=140)?;
+    }
+
+    for value in page_content.values() {
+      util::enforce_constraints(value.len(), 300..=50000)?;
+    }
+
+    let body = serde_json::to_vec(&EditProject {
+      headline,
+      page_content,
+    })
+    .map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(Method::PATCH, api!(self.base.server, "/projects/@me"), body)
+      .await?;
+
+    Ok(())
+  }
+
+  /// Creates a new announcement for a project. Announcements appear on a project's page and can be used to notify users about updates, new features, or other news.
+  ///
+  /// # Errors
+  ///
+  /// If the `title` or `content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_announcement(
+    &self,
+    title: String,
+    content: String,
+    category: AnnouncementCategory,
+  ) -> Result<(), Error> {
+    util::enforce_constraints(title.len(), 3..=100)?;
+    util::enforce_constraints(content.len(), 100..=2000)?;
+
+    let body = serde_json::to_vec(&PostAnnouncement {
+      title,
+      content,
+      category,
+    })
+    .map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(
+        Method::POST,
+        api!(self.base.server, "/projects/@me/announcements"),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Submits a single metrics payload for a project. Use this to push fresh numbers after an event such as joining or leaving a guild player connecting.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_metrics<M>(&self, metrics: M) -> Result<(), Error>
+  where
+    M: Serialize,
+  {
+    let body = serde_json::to_vec(&metrics).map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(
+        Method::PATCH,
+        api!(self.base.server, "/projects/@me/metrics"),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Submits up to 100 metrics entries in a single request.
+  ///
+  /// # Errors
+  ///
+  /// If the `metrics` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_timestamped_metrics<M>(
+    &self,
+    metrics: TimestampedMetrics<M>,
+  ) -> Result<(), Error>
+  where
+    M: Clone + Debug + Default + Serialize,
+  {
+    util::enforce_constraints(metrics.len(), 1..=100)?;
+
+    let body = serde_json::to_vec(&PostTimestampedMetrics { data: metrics })
+      .map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(
+        Method::POST,
+        api!(self.base.server, "/projects/@me/metrics/batch"),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Overwrites the list of slash command definitions for a bot project on Top.gg. This is only applicable to bot-type projects on the discord platform.
+  ///
+  /// # Errors
+  ///
+  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  pub async fn post_commands<C>(&self, commands: C) -> Result<(), Error>
+  where
+    C: Serialize,
+  {
+    let body = serde_json::to_vec(&commands).map_err(Error::Serialization)?;
+
+    self
+      .base
+      .send_inner(
+        Method::PUT,
+        api!(self.base.server, "/projects/@me/commands"),
+        body,
+      )
+      .await?;
+
+    Ok(())
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page.)
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_votes(&self, since: DateTime<Utc>) -> Result<Paginated<Vote>, Error> {
+    self
+      .base
+      .send(
+        Method::GET,
+        api!(
+          self.base.server,
+          "/projects/@me/votes?startDate={}",
+          urlencoding::encode(&since.to_rfc3339())
+        ),
+        vec![],
+      )
+      .await
+  }
+
+  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page), after a previously returned paginated list.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  #[allow(clippy::missing_panics_doc)]
+  pub async fn get_votes_after(
+    &self,
+    reference: &Paginated<Vote>,
+  ) -> Result<Paginated<Vote>, Error> {
+    if reference.is_last() {
+      return Err(Error::LastPage);
+    }
+
+    self
+      .base
+      .send(
+        Method::GET,
+        api!(
+          self.base.server,
+          "/projects/@me/votes?cursor={}",
+          reference.cursor.as_deref().unwrap()
+        ),
+        vec![],
+      )
+      .await
+  }
+
+  /// Fetches the most recent vote for a specific user.
+  ///
+  /// # Errors
+  ///
+  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
+  pub async fn get_vote(
+    &self,
+    user_id: u64,
+    source: UserSource,
+  ) -> Result<Option<PartialVote>, Error> {
+    match self
+      .base
+      .send::<PartialVote>(
+        Method::GET,
+        api!(
+          self.base.server,
+          "/projects/@me/votes/{}?source={}",
+          user_id,
+          source.as_str()
+        ),
+        vec![],
+      )
+      .await
+    {
+      Ok(vote) => Ok(Some(vote)),
+
+      Err(error) => {
+        if let Error::Incoming(error) = &error
+          && error.status == 404
+          && matches!(
+            error.detail.as_deref(),
+            Some("VOTE_NOT_FOUND" | "VOTE_EXPIRED")
+          )
+        {
+          Ok(None)
+        } else {
+          Err(error)
+        }
+      }
+    }
+  }
+}
+
+/// A base client for application and oauth2 access tokens.
+#[derive(Clone)]
+pub struct BaseApplicationClient<P: HttpProvider> {
+  base: BaseClient<P>,
+}
+
+impl<P> BaseApplicationClient<P>
+where
+  P: HttpProvider,
+{
+  const fn new(provider: P, #[cfg(test)] server: Arc<MockServer>) -> Self {
+    Self {
+      base: BaseClient {
+        provider,
+        #[cfg(test)]
+        server,
+      },
+    }
+  }
 
   /// Fetches the projects the current credential covers.
   ///
@@ -251,7 +546,8 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_projects(&self) -> Result<Paginated<PartialProject>, Error> {
     self
-      .send(Method::GET, api!(self.server, "/projects"), vec![])
+      .base
+      .send(Method::GET, api!(self.base.server, "/projects"), vec![])
       .await
   }
 
@@ -260,6 +556,7 @@ where
   /// # Errors
   ///
   /// If [`Paginated::is_last`] is `true`, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  #[allow(clippy::missing_panics_doc)]
   pub async fn get_projects_after(
     &self,
     reference: &Paginated<PartialProject>,
@@ -269,9 +566,14 @@ where
     }
 
     self
+      .base
       .send(
         Method::GET,
-        api!(self.server, "/projects?cursor={}", reference.cursor),
+        api!(
+          self.base.server,
+          "/projects?cursor={}",
+          reference.cursor.as_deref().unwrap()
+        ),
         vec![],
       )
       .await
@@ -284,7 +586,12 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_project(&self, id: u64) -> Result<Project, Error> {
     self
-      .send(Method::GET, api!(self.server, "/projects/{}", id), vec![])
+      .base
+      .send(
+        Method::GET,
+        api!(self.base.server, "/projects/{}", id),
+        vec![],
+      )
       .await
   }
 
@@ -314,7 +621,12 @@ where
     .map_err(Error::Serialization)?;
 
     self
-      .send_inner(Method::PATCH, api!(self.server, "/projects/{}", id), body)
+      .base
+      .send_inner(
+        Method::PATCH,
+        api!(self.base.server, "/projects/{}", id),
+        body,
+      )
       .await?;
 
     Ok(())
@@ -343,9 +655,10 @@ where
     .map_err(Error::Serialization)?;
 
     self
+      .base
       .send_inner(
         Method::POST,
-        api!(self.server, "/projects/{}/announcements", id),
+        api!(self.base.server, "/projects/{}/announcements", id),
         body,
       )
       .await?;
@@ -365,9 +678,10 @@ where
     let body = serde_json::to_vec(&metrics).map_err(Error::Serialization)?;
 
     self
+      .base
       .send_inner(
         Method::PATCH,
-        api!(self.server, "/projects/{}/metrics", id),
+        api!(self.base.server, "/projects/{}/metrics", id),
         body,
       )
       .await?;
@@ -394,9 +708,10 @@ where
       .map_err(Error::Serialization)?;
 
     self
+      .base
       .send_inner(
         Method::POST,
-        api!(self.server, "/projects/{}/metrics/batch", id),
+        api!(self.base.server, "/projects/{}/metrics/batch", id),
         body,
       )
       .await?;
@@ -416,9 +731,10 @@ where
     let body = serde_json::to_vec(&commands).map_err(Error::Serialization)?;
 
     self
+      .base
       .send_inner(
         Method::PUT,
-        api!(self.server, "/projects/{}/commands", id),
+        api!(self.base.server, "/projects/{}/commands", id),
         body,
       )
       .await?;
@@ -433,10 +749,11 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_votes(&self, id: u64, since: DateTime<Utc>) -> Result<Paginated<Vote>, Error> {
     self
+      .base
       .send(
         Method::GET,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/votes?startDate={}",
           id,
           urlencoding::encode(&since.to_rfc3339())
@@ -451,6 +768,7 @@ where
   /// # Errors
   ///
   /// If [`Paginated::is_last`] is `true`, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
+  #[allow(clippy::missing_panics_doc)]
   pub async fn get_votes_after(
     &self,
     id: u64,
@@ -461,13 +779,14 @@ where
     }
 
     self
+      .base
       .send(
         Method::GET,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/votes?cursor={}",
           id,
-          reference.cursor
+          reference.cursor.as_deref().unwrap()
         ),
         vec![],
       )
@@ -486,10 +805,11 @@ where
     source: UserSource,
   ) -> Result<Option<PartialVote>, Error> {
     match self
+      .base
       .send::<PartialVote>(
         Method::GET,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/votes/{}?source={}",
           id,
           user_id,
@@ -501,15 +821,19 @@ where
     {
       Ok(vote) => Ok(Some(vote)),
 
-      Err(Error::Incoming(error)) => {
-        if error.status == 404 && matches!(error.detail.as_deref(), Some("VOTE_EXPIRED")) {
+      Err(error) => {
+        if let Error::Incoming(error) = &error
+          && error.status == 404
+          && matches!(
+            error.detail.as_deref(),
+            Some("VOTE_NOT_FOUND" | "VOTE_EXPIRED")
+          )
+        {
           Ok(None)
         } else {
-          Err(Error::Incoming(error))
+          Err(error)
         }
       }
-
-      Err(error) => Err(error),
     }
   }
 
@@ -520,9 +844,10 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_integrations(&self, id: u64) -> Result<Vec<Integration>, Error> {
     self
+      .base
       .send(
         Method::GET,
-        api!(self.server, "/projects/{}/integrations", id),
+        api!(self.base.server, "/projects/{}/integrations", id),
         vec![],
       )
       .await
@@ -539,10 +864,11 @@ where
     integration_id: u64,
   ) -> Result<(), Error> {
     self
+      .base
       .send_inner(
         Method::PUT,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/integrations/{}",
           project_id,
           integration_id
@@ -565,10 +891,11 @@ where
     integration_id: u64,
   ) -> Result<(), Error> {
     self
+      .base
       .send_inner(
         Method::DELETE,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/integrations/{}",
           project_id,
           integration_id,
@@ -587,9 +914,10 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_webhooks(&self, id: u64) -> Result<Vec<Webhook>, Error> {
     self
+      .base
       .send(
         Method::GET,
-        api!(self.server, "/projects/{}/webhooks", id),
+        api!(self.base.server, "/projects/{}/webhooks", id),
         vec![],
       )
       .await
@@ -604,9 +932,10 @@ where
     let body = serde_json::to_vec(&webhook).map_err(Error::Serialization)?;
 
     self
+      .base
       .send(
         Method::POST,
-        api!(self.server, "/projects/{}/webhooks", id),
+        api!(self.base.server, "/projects/{}/webhooks", id),
         body,
       )
       .await
@@ -619,10 +948,11 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn delete_webhook(&self, project_id: u64, webhook_id: u64) -> Result<(), Error> {
     self
+      .base
       .send_inner(
         Method::DELETE,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/webhooks/{}",
           project_id,
           webhook_id
@@ -645,10 +975,11 @@ where
     webhook_id: u64,
   ) -> Result<String, Error> {
     let response: RotateWebhookSecret = self
+      .base
       .send(
         Method::POST,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/webhooks/{}/rotate",
           project_id,
           webhook_id
@@ -667,10 +998,11 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn test_webhook(&self, project_id: u64, webhook_id: u64) -> Result<(), Error> {
     self
+      .base
       .send_inner(
         Method::POST,
         api!(
-          self.server,
+          self.base.server,
           "/projects/{}/webhooks/{}/test",
           project_id,
           webhook_id
@@ -683,169 +1015,30 @@ where
   }
 }
 
-impl<P> Clone for BaseClient<P>
-where
-  P: Clone,
-{
-  fn clone(&self) -> Self {
-    Self {
-      provider: self.provider.clone(),
-      #[cfg(test)]
-      server: self.server.clone(),
-    }
-  }
+/// An API client using an application token.
+pub struct ApplicationClient {
+  base: BaseApplicationClient<DirectHttpProvider>,
 }
 
-impl<P> Deref for BaseClient<P> {
-  type Target = P;
-
-  fn deref(&self) -> &Self::Target {
-    &self.provider
-  }
-}
-
-/// A project or application API client.
-pub struct Client {
-  base: BaseClient<DirectHttpProvider>,
-}
-
-impl Client {
+impl ApplicationClient {
   /// Creates the client.
   #[must_use]
   pub fn new(token: String, #[cfg(test)] server: Arc<MockServer>) -> Self {
     Self {
-      base: BaseClient {
-        provider: DirectHttpProvider {
+      base: BaseApplicationClient::new(
+        DirectHttpProvider {
           token,
           http: util::http_client(),
         },
         #[cfg(test)]
         server,
-      },
+      ),
     }
-  }
-
-  /// Fetches a project associated with the current token.
-  ///
-  /// # Errors
-  ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_project(&self) -> Result<Project, Error> {
-    self.base.get_project(Snowflake::Me).await
-  }
-
-  /// Updates the headline and/or page content for a project. Both fields are locale-keyed, so you can set content for multiple languages in a single request.
-  ///
-  /// # Errors
-  ///
-  /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn edit_project(
-    &self,
-    headline: HashMap<Locale, String>,
-    page_content: HashMap<Locale, String>,
-  ) -> Result<(), Error> {
-    self
-      .base
-      .edit_project(Snowflake::Me, headline, page_content)
-      .await
-  }
-
-  /// Creates a new announcement for a project. Announcements appear on a project's page and can be used to notify users about updates, new features, or other news.
-  ///
-  /// # Errors
-  ///
-  /// If the `title` or `content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_announcement(
-    &self,
-    title: String,
-    content: String,
-    category: AnnouncementCategory,
-  ) -> Result<(), Error> {
-    self
-      .base
-      .post_announcement(Snowflake::Me, title, content, category)
-      .await
-  }
-
-  /// Submits a single metrics payload for a project. Use this to push fresh numbers after an event such as joining or leaving a guild player connecting.
-  ///
-  /// # Errors
-  ///
-  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_metrics<M>(&self, metrics: M) -> Result<(), Error>
-  where
-    M: Serialize,
-  {
-    self.base.post_metrics(Snowflake::Me, metrics).await
-  }
-
-  /// Submits up to 100 metrics entries in a single request.
-  ///
-  /// # Errors
-  ///
-  /// If the `metrics` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_timestamped_metrics<M>(
-    &self,
-    metrics: TimestampedMetrics<M>,
-  ) -> Result<(), Error>
-  where
-    M: Clone + Debug + Default + Serialize,
-  {
-    self
-      .base
-      .post_timestamped_metrics(Snowflake::Me, metrics)
-      .await
-  }
-
-  /// Overwrites the list of slash command definitions for a bot project on Top.gg. This is only applicable to bot-type projects on the discord platform.
-  ///
-  /// # Errors
-  ///
-  /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_commands<C>(&self, commands: C) -> Result<(), Error>
-  where
-    C: Serialize,
-  {
-    self.base.post_commands(Snowflake::Me, commands).await
-  }
-
-  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page.)
-  ///
-  /// # Errors
-  ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_votes(&self, since: DateTime<Utc>) -> Result<Paginated<Vote>, Error> {
-    self.base.get_votes(Snowflake::Me, since).await
-  }
-
-  /// Fetches a cursor-paginated list of votes for a project, ordered by creation date (oldest first within each page), after a previously returned paginated list.
-  ///
-  /// # Errors
-  ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_votes_after(
-    &self,
-    reference: &Paginated<Vote>,
-  ) -> Result<Paginated<Vote>, Error> {
-    self.base.get_votes_after(Snowflake::Me, reference).await
-  }
-
-  /// Fetches the most recent vote for a specific user.
-  ///
-  /// # Errors
-  ///
-  /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_vote(
-    &self,
-    user_id: u64,
-    source: UserSource,
-  ) -> Result<Option<PartialVote>, Error> {
-    self.base.get_vote(Snowflake::Me, user_id, source).await
   }
 }
 
-impl Deref for Client {
-  type Target = BaseClient<DirectHttpProvider>;
+impl Deref for ApplicationClient {
+  type Target = BaseApplicationClient<DirectHttpProvider>;
 
   fn deref(&self) -> &Self::Target {
     &self.base
@@ -853,8 +1046,11 @@ impl Deref for Client {
 }
 
 #[cfg(feature = "oauth2")]
-fn default_token_expires_at() -> DateTime<Utc> {
-  Utc::now() + REFRESH_INTERVAL
+fn deserialize_expires_in<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  i64::deserialize(deserializer).map(|seconds| Utc::now() + Duration::seconds(seconds))
 }
 
 /// An oauth2 session.
@@ -871,8 +1067,8 @@ pub struct Oauth2Session {
   pub refresh_token: String,
 
   /// When the session's access token expires.
-  #[serde(skip_deserializing, default = "default_token_expires_at")]
-  pub token_expires_at: DateTime<Utc>,
+  #[serde(rename = "expires_in", deserialize_with = "deserialize_expires_in")]
+  pub expires_at: DateTime<Utc>,
 }
 
 #[cfg(feature = "oauth2")]
@@ -880,35 +1076,7 @@ impl Oauth2Session {
   /// Whether the session's access token has expired.
   #[must_use]
   pub fn has_expired(&self) -> bool {
-    Utc::now() >= self.token_expires_at
-  }
-}
-
-#[cfg(feature = "oauth2")]
-struct Oauth2SessionWrapper {
-  session: RwLock<Oauth2Session>,
-  cancel: CancellationToken,
-}
-
-#[cfg(feature = "oauth2")]
-impl Oauth2SessionWrapper {
-  async fn delay(&self, duration: Duration) -> bool {
-    let Ok(duration) = duration.to_std() else {
-      return true;
-    };
-
-    tokio::select! {
-      () = self.cancel.cancelled() => false,
-
-      () = sleep(duration) => true,
-    }
-  }
-}
-
-#[cfg(feature = "oauth2")]
-impl Drop for Oauth2SessionWrapper {
-  fn drop(&mut self) {
-    self.cancel.cancel();
+    Utc::now() >= self.expires_at
   }
 }
 
@@ -1054,43 +1222,17 @@ impl Oauth2 {
     session: Oauth2Session,
     #[cfg(test)] server: Arc<MockServer>,
   ) -> Oauth2Client {
-    let base = BaseClient {
-      provider: Oauth2HttpProvider {
-        oauth2: Arc::clone(&self.base),
-        session: Arc::new(Oauth2SessionWrapper {
-          session: RwLock::new(session),
-          cancel: CancellationToken::default(),
-        }),
-        #[cfg(test)]
-        server: server.clone(),
-      },
-      #[cfg(test)]
-      server,
-    };
-    let provider = base.provider.clone();
-
     Oauth2Client {
-      base,
-      _thread: Arc::new(task::spawn(async move {
-        let now = Utc::now();
-        let starting_delay = {
-          let session3 = provider.session.session.read().await;
-
-          session3.token_expires_at - now - Duration::seconds(5)
-        };
-
-        let delay = REFRESH_INTERVAL - Duration::seconds(5);
-
-        if provider.session.delay(starting_delay).await {
-          loop {
-            let _ = provider.refresh_token().await;
-
-            if !provider.session.delay(delay).await {
-              break;
-            }
-          }
-        }
-      })),
+      base: BaseApplicationClient::new(
+        Oauth2HttpProvider {
+          oauth2: Arc::clone(&self.base),
+          session: Arc::new(RwLock::new(session)),
+          #[cfg(test)]
+          server: server.clone(),
+        },
+        #[cfg(test)]
+        server,
+      ),
     }
   }
 }
@@ -1100,15 +1242,14 @@ impl Oauth2 {
 #[cfg(feature = "oauth2")]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct Oauth2Client {
-  base: BaseClient<Oauth2HttpProvider>,
-  _thread: Arc<JoinHandle<()>>,
+  base: BaseApplicationClient<Oauth2HttpProvider>,
 }
 
 #[cfg(feature = "oauth2")]
 impl Oauth2Client {
   /// Retrieves the client's oauth2 session enclosed within a guard.
   pub async fn get_session(&self) -> RwLockReadGuard<'_, Oauth2Session> {
-    self.base.provider.session.session.read().await
+    self.base.base.provider.session.read().await
   }
 
   /// Whether the client's session access token has expired.
@@ -1124,7 +1265,12 @@ impl Oauth2Client {
   pub async fn get_authorized_user(&self) -> Result<User, Error> {
     self
       .base
-      .send(Method::GET, api!(self.base.server, "/users/@me"), vec![])
+      .base
+      .send(
+        Method::GET,
+        api!(self.base.base.server, "/users/@me"),
+        vec![],
+      )
       .await
   }
 
@@ -1136,9 +1282,10 @@ impl Oauth2Client {
   pub async fn get_authorized_user_projects(&self) -> Result<Vec<UserProject>, Error> {
     self
       .base
+      .base
       .send(
         Method::GET,
-        api!(self.base.server, "/users/@me/projects"),
+        api!(self.base.base.server, "/users/@me/projects"),
         vec![],
       )
       .await
@@ -1157,9 +1304,10 @@ impl Oauth2Client {
 
     self
       .base
+      .base
       .send_inner(
         Method::POST,
-        api!(self.base.server, "/users/@me/projects"),
+        api!(self.base.base.server, "/users/@me/projects"),
         body,
       )
       .await?;
@@ -1173,11 +1321,11 @@ impl Oauth2Client {
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn revoke_token(&self) -> Result<(), Error> {
-    let session = self.base.provider.session.session.read().await;
+    let session = self.get_session().await;
     let body = format!(
       "client_id={}&client_secret={}&token={}",
-      self.oauth2.client_id,
-      self.oauth2.client_secret,
+      self.base.base.provider.oauth2.client_id,
+      self.base.base.provider.oauth2.client_secret,
       urlencoding::encode(&session.refresh_token)
     )
     .into_bytes();
@@ -1185,16 +1333,14 @@ impl Oauth2Client {
     drop(session);
 
     util::request(
-      &self.oauth2.http,
+      &self.base.base.provider.oauth2.http,
       Method::POST,
-      api!(self.base.server, "/oauth2/revoke"),
+      api!(self.base.base.server, "/oauth2/revoke"),
       None,
       "application/x-www-form-urlencoded",
       body,
     )
     .await?;
-
-    self.base.session.cancel.cancel();
 
     Ok(())
   }
@@ -1202,7 +1348,7 @@ impl Oauth2Client {
 
 #[cfg(feature = "oauth2")]
 impl Deref for Oauth2Client {
-  type Target = BaseClient<Oauth2HttpProvider>;
+  type Target = BaseApplicationClient<Oauth2HttpProvider>;
 
   fn deref(&self) -> &Self::Target {
     &self.base

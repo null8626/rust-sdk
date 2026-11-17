@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 #[tokio::main]
 async fn main() {
-  let client = topgg::Client::new(env!("TOPGG_TOKEN").to_string());
+  let client = topgg::ProjectClient::new(env!("TOPGG_TOKEN").to_string());
 
   let project = client.get_project().await.unwrap();
   println!("{project:?}");

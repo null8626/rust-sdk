@@ -621,7 +621,8 @@ pub struct ProjectSubmission {
 #[cfg(feature = "api")]
 #[derive(Clone, Debug, Deserialize)]
 pub struct Paginated<T: DeserializeOwned> {
-  pub(super) cursor: String,
+  #[serde(default)]
+  pub(super) cursor: Option<String>,
 
   #[serde(alias = "projects")]
   data: Vec<T>,
@@ -635,7 +636,7 @@ where
   /// Whether this is the last page.
   #[must_use]
   pub const fn is_last(&self) -> bool {
-    self.data.is_empty()
+    self.cursor.is_none() || self.data.is_empty()
   }
 }
 

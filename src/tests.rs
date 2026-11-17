@@ -2,8 +2,8 @@
 use super::webhooks;
 #[cfg(feature = "api")]
 use super::{
-  AnnouncementCategory, BaseWebhook, Client, DiscordBotMetrics, EditProject, Error, Locale,
-  PostAnnouncement, PostTimestampedMetrics, TimestampedMetrics, UserSource,
+  AnnouncementCategory, ApplicationClient, BaseWebhook, DiscordBotMetrics, EditProject, Error,
+  Locale, PostAnnouncement, PostTimestampedMetrics, ProjectClient, TimestampedMetrics, UserSource,
 };
 #[cfg(feature = "oauth2")]
 use super::{Oauth2, Platform, ProjectSubmission, ProjectType};
@@ -24,10 +24,20 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::time::sleep;
 
 #[cfg(feature = "api")]
-macro_rules! mock_server_client {
+macro_rules! mock_server_project_client {
   () => {{
     let server = Arc::new(MockServer::start());
-    let client = Client::new(String::from("token"), server.clone());
+    let client = ProjectClient::new(String::from("token"), server.clone());
+
+    (server, client)
+  }};
+}
+
+#[cfg(feature = "api")]
+macro_rules! mock_server_application_client {
+  () => {{
+    let server = Arc::new(MockServer::start());
+    let client = ApplicationClient::new(String::from("token"), server.clone());
 
     (server, client)
   }};
@@ -135,7 +145,7 @@ macro_rules! webhook_payload_works {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_projects() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_get!(server, "/projects", "get_projects.json");
 
   let projects = client.get_projects().await.unwrap();
@@ -152,7 +162,7 @@ async fn get_projects() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_projects_after() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_get!(server, "/projects", "get_projects_cursor.json");
 
   let projects = client.get_projects().await.unwrap();
@@ -167,7 +177,7 @@ async fn get_projects_after() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_project() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
   let endpoint = mock_get!(server, "/projects/@me", "get_projects_id.json");
 
   let _ = client.get_project().await.unwrap();
@@ -178,7 +188,7 @@ async fn get_project() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn edit_project() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
 
   let headline = HashMap::from_iter([
     (Locale::English, String::from("hello this is a headline")),
@@ -227,7 +237,7 @@ async fn edit_project() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn post_announcement() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
 
   let title = String::from("My project announcement");
   let content = "Lorem ipsum".repeat(25);
@@ -266,7 +276,7 @@ async fn post_announcement() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn post_commands() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
 
   let commands = serde_json::json!([
     {
@@ -290,7 +300,7 @@ async fn post_commands() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn post_metrics() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
 
   let metrics = DiscordBotMetrics {
     server_count: Some(5),
@@ -312,7 +322,7 @@ async fn post_metrics() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn post_timestamped_metrics() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
 
   let metrics = DiscordBotMetrics {
     server_count: Some(5),
@@ -358,7 +368,7 @@ async fn post_timestamped_metrics() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_votes() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
   let endpoint = mock_get!(server, "/projects/@me/votes", "get_projects_id_votes.json");
 
   let _ = client
@@ -372,7 +382,7 @@ async fn get_votes() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_votes_after() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
   let endpoint = mock_get!(
     server,
     "/projects/@me/votes",
@@ -394,7 +404,7 @@ async fn get_votes_after() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_vote() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_project_client!();
   let endpoint = mock_get!(
     server,
     "/projects/@me/votes/661200758510977084",
@@ -412,7 +422,7 @@ async fn get_vote() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_integrations() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_get!(
     server,
     "/projects/364806029876555776/integrations",
@@ -427,7 +437,7 @@ async fn get_integrations() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn connect_integration() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_endpoint!(
     server,
     Method::PUT,
@@ -445,7 +455,7 @@ async fn connect_integration() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn disconnect_integration() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_endpoint!(
     server,
     Method::DELETE,
@@ -463,7 +473,7 @@ async fn disconnect_integration() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn get_webhooks() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_get!(
     server,
     "/projects/364806029876555776/webhooks",
@@ -478,7 +488,7 @@ async fn get_webhooks() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn create_webhook() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let webhook = BaseWebhook {
     label: String::from("test webhook"),
     url: String::from("http://localhost:3000/webhooks"),
@@ -509,7 +519,7 @@ async fn create_webhook() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn delete_webhook() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_endpoint!(
     server,
     Method::DELETE,
@@ -527,7 +537,7 @@ async fn delete_webhook() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn rotate_webhook_secret() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
 
   let endpoint = server.mock(|when, then| {
     when
@@ -556,7 +566,7 @@ async fn rotate_webhook_secret() {
 #[tokio::test]
 #[cfg(feature = "api")]
 async fn test_webhook() {
-  let (server, client) = mock_server_client!();
+  let (server, client) = mock_server_application_client!();
   let endpoint = mock_endpoint!(
     server,
     Method::POST,
@@ -592,15 +602,20 @@ async fn oauth2_url() {
   assert_eq!(session.token, "eyJhbGciOiJIUzI1NiIs...");
   assert_eq!(session.refresh_token, "k2Ll3...");
 
-  let previous_token_expires_at = session.token_expires_at.timestamp();
+  let previous_expires_at = session.expires_at.timestamp();
   let client = oauth2.new_client(session, server.clone());
 
   sleep(StdDuration::from_millis(1500)).await;
 
+  let get_authorized_user_projects_endpoint =
+    mock_get!(server, "/users/@me/projects", "get_users_me_projects.json");
+  let _ = client.get_authorized_user_projects().await.unwrap();
+
   assert!(endpoint.calls() >= 2);
+  get_authorized_user_projects_endpoint.assert();
   assert_ne!(
-    client.get_session().await.token_expires_at.timestamp(),
-    previous_token_expires_at
+    client.get_session().await.expires_at.timestamp(),
+    previous_expires_at
   );
 }
 
