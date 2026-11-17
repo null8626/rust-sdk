@@ -1252,11 +1252,6 @@ impl Oauth2Client {
     self.base.base.provider.session.read().await
   }
 
-  /// Whether the client's session access token has expired.
-  pub async fn has_expired(&self) -> bool {
-    self.get_session().await.has_expired()
-  }
-
   /// Fetches the user who authorized the application.
   ///
   /// # Errors
