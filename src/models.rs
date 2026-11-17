@@ -545,6 +545,10 @@ pub struct Webhook {
   /// The webhook's Top.gg ID.
   #[serde(deserialize_with = "util::deserialize_snowflake")]
   pub id: u64,
+
+  /// The webhook's secret.
+  #[serde(default)]
+  pub secret: Option<String>,
 }
 
 /// A user's platform connection.
