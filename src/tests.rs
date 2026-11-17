@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
+
 #[cfg(feature = "webhooks")]
 use super::webhooks;
 #[cfg(feature = "api")]
