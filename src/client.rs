@@ -264,14 +264,14 @@ where
     &self,
     reference: &Paginated<PartialProject>,
   ) -> Result<Paginated<PartialProject>, Error> {
-    let Some(cursor) = &reference.cursor else {
+    if reference.is_last() {
       return Err(Error::LastPage);
-    };
+    }
 
     self
       .send(
         Method::GET,
-        api!(self.server, "/projects?cursor={}", cursor),
+        api!(self.server, "/projects?cursor={}", reference.cursor),
         vec![],
       )
       .await
@@ -468,9 +468,9 @@ where
     id: impl Into<Snowflake>,
     reference: &Paginated<Vote>,
   ) -> Result<Paginated<Vote>, Error> {
-    let Some(cursor) = &reference.cursor else {
+    if reference.is_last() {
       return Err(Error::LastPage);
-    };
+    }
 
     self
       .send(
@@ -479,7 +479,7 @@ where
           self.server,
           "/projects/{}/votes?cursor={}",
           id.into(),
-          cursor
+          reference.cursor
         ),
         vec![],
       )
