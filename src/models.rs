@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 #[cfg(feature = "api")]
 use std::{
-  fmt::{self, Debug, Display, Formatter},
+  fmt::Debug,
   marker::PhantomData,
   ops::{Deref, DerefMut},
 };
@@ -658,47 +658,5 @@ where
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.data
-  }
-}
-
-/// A Top.gg snowflake.
-#[cfg(feature = "api")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Snowflake {
-  /// The snowflake's value.
-  Snowflake(u64),
-
-  /// `@me`.
-  Me,
-}
-
-#[cfg(feature = "api")]
-impl From<u64> for Snowflake {
-  fn from(value: u64) -> Self {
-    Self::Snowflake(value)
-  }
-}
-
-#[cfg(feature = "api")]
-impl FromStr for Snowflake {
-  type Err = <u64 as FromStr>::Err;
-
-  fn from_str(value: &str) -> Result<Self, Self::Err> {
-    if value == "@me" {
-      return Ok(Self::Me);
-    }
-
-    Ok(Self::Snowflake(value.parse()?))
-  }
-}
-
-#[cfg(feature = "api")]
-impl Display for Snowflake {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    match self {
-      Self::Snowflake(value) => Display::fmt(value, f),
-
-      Self::Me => f.write_str("@me"),
-    }
   }
 }

@@ -3,7 +3,7 @@
 
 use super::{
   AnnouncementCategory, BaseWebhook, Error, Integration, Locale, Paginated, PartialProject,
-  PartialVote, Project, Snowflake, TimestampedMetrics, UserSource, Vote, Webhook, util,
+  PartialVote, Project, TimestampedMetrics, UserSource, Vote, Webhook, util,
 };
 #[cfg(feature = "oauth2")]
 use super::{ProjectSubmission, User, UserProject};
@@ -282,13 +282,9 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_project(&self, id: impl Into<Snowflake>) -> Result<Project, Error> {
+  pub async fn get_project(&self, id: u64) -> Result<Project, Error> {
     self
-      .send(
-        Method::GET,
-        api!(self.server, "/projects/{}", id.into()),
-        vec![],
-      )
+      .send(Method::GET, api!(self.server, "/projects/{}", id), vec![])
       .await
   }
 
@@ -299,7 +295,7 @@ where
   /// If the `headline` or `page_content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn edit_project(
     &self,
-    id: impl Into<Snowflake>,
+    id: u64,
     headline: HashMap<Locale, String>,
     page_content: HashMap<Locale, String>,
   ) -> Result<(), Error> {
@@ -318,11 +314,7 @@ where
     .map_err(Error::Serialization)?;
 
     self
-      .send_inner(
-        Method::PATCH,
-        api!(self.server, "/projects/{}", id.into()),
-        body,
-      )
+      .send_inner(Method::PATCH, api!(self.server, "/projects/{}", id), body)
       .await?;
 
     Ok(())
@@ -335,7 +327,7 @@ where
   /// If the `title` or `content` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn post_announcement(
     &self,
-    id: impl Into<Snowflake>,
+    id: u64,
     title: String,
     content: String,
     category: AnnouncementCategory,
@@ -353,7 +345,7 @@ where
     self
       .send_inner(
         Method::POST,
-        api!(self.server, "/projects/{}/announcements", id.into()),
+        api!(self.server, "/projects/{}/announcements", id),
         body,
       )
       .await?;
@@ -366,7 +358,7 @@ where
   /// # Errors
   ///
   /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_metrics<M>(&self, id: impl Into<Snowflake>, metrics: M) -> Result<(), Error>
+  pub async fn post_metrics<M>(&self, id: u64, metrics: M) -> Result<(), Error>
   where
     M: Serialize,
   {
@@ -375,7 +367,7 @@ where
     self
       .send_inner(
         Method::PATCH,
-        api!(self.server, "/projects/{}/metrics", id.into()),
+        api!(self.server, "/projects/{}/metrics", id),
         body,
       )
       .await?;
@@ -390,7 +382,7 @@ where
   /// If the `metrics` length does not match the required ranges, the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn post_timestamped_metrics<M>(
     &self,
-    id: impl Into<Snowflake>,
+    id: u64,
     metrics: TimestampedMetrics<M>,
   ) -> Result<(), Error>
   where
@@ -404,7 +396,7 @@ where
     self
       .send_inner(
         Method::POST,
-        api!(self.server, "/projects/{}/metrics/batch", id.into()),
+        api!(self.server, "/projects/{}/metrics/batch", id),
         body,
       )
       .await?;
@@ -417,7 +409,7 @@ where
   /// # Errors
   ///
   /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn post_commands<C>(&self, id: impl Into<Snowflake>, commands: C) -> Result<(), Error>
+  pub async fn post_commands<C>(&self, id: u64, commands: C) -> Result<(), Error>
   where
     C: Serialize,
   {
@@ -426,7 +418,7 @@ where
     self
       .send_inner(
         Method::PUT,
-        api!(self.server, "/projects/{}/commands", id.into()),
+        api!(self.server, "/projects/{}/commands", id),
         body,
       )
       .await?;
@@ -439,18 +431,14 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_votes(
-    &self,
-    id: impl Into<Snowflake>,
-    since: DateTime<Utc>,
-  ) -> Result<Paginated<Vote>, Error> {
+  pub async fn get_votes(&self, id: u64, since: DateTime<Utc>) -> Result<Paginated<Vote>, Error> {
     self
       .send(
         Method::GET,
         api!(
           self.server,
           "/projects/{}/votes?startDate={}",
-          id.into(),
+          id,
           urlencoding::encode(&since.to_rfc3339())
         ),
         vec![],
@@ -465,7 +453,7 @@ where
   /// If [`Paginated::is_last`] is `true`, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
   pub async fn get_votes_after(
     &self,
-    id: impl Into<Snowflake>,
+    id: u64,
     reference: &Paginated<Vote>,
   ) -> Result<Paginated<Vote>, Error> {
     if reference.is_last() {
@@ -478,7 +466,7 @@ where
         api!(
           self.server,
           "/projects/{}/votes?cursor={}",
-          id.into(),
+          id,
           reference.cursor
         ),
         vec![],
@@ -493,8 +481,8 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_vote(
     &self,
-    id: impl Into<Snowflake>,
-    user_id: impl Into<Snowflake>,
+    id: u64,
+    user_id: u64,
     source: UserSource,
   ) -> Result<Option<PartialVote>, Error> {
     match self
@@ -503,8 +491,8 @@ where
         api!(
           self.server,
           "/projects/{}/votes/{}?source={}",
-          id.into(),
-          user_id.into(),
+          id,
+          user_id,
           source.as_str()
         ),
         vec![],
@@ -530,14 +518,11 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_integrations(
-    &self,
-    id: impl Into<Snowflake>,
-  ) -> Result<Vec<Integration>, Error> {
+  pub async fn get_integrations(&self, id: u64) -> Result<Vec<Integration>, Error> {
     self
       .send(
         Method::GET,
-        api!(self.server, "/projects/{}/integrations", id.into()),
+        api!(self.server, "/projects/{}/integrations", id),
         vec![],
       )
       .await
@@ -550,7 +535,7 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn connect_integration(
     &self,
-    project_id: impl Into<Snowflake>,
+    project_id: u64,
     integration_id: u64,
   ) -> Result<(), Error> {
     self
@@ -559,7 +544,7 @@ where
         api!(
           self.server,
           "/projects/{}/integrations/{}",
-          project_id.into(),
+          project_id,
           integration_id
         ),
         vec![],
@@ -576,7 +561,7 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn disconnect_integration(
     &self,
-    project_id: impl Into<Snowflake>,
+    project_id: u64,
     integration_id: u64,
   ) -> Result<(), Error> {
     self
@@ -585,7 +570,7 @@ where
         api!(
           self.server,
           "/projects/{}/integrations/{}",
-          project_id.into(),
+          project_id,
           integration_id,
         ),
         vec![],
@@ -600,11 +585,11 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn get_webhooks(&self, id: impl Into<Snowflake>) -> Result<Vec<Webhook>, Error> {
+  pub async fn get_webhooks(&self, id: u64) -> Result<Vec<Webhook>, Error> {
     self
       .send(
         Method::GET,
-        api!(self.server, "/projects/{}/webhooks", id.into()),
+        api!(self.server, "/projects/{}/webhooks", id),
         vec![],
       )
       .await
@@ -615,17 +600,13 @@ where
   /// # Errors
   ///
   /// If the client is unable to serialize the request's JSON body, the client received an unfavorable response from the API, or the client is ratelimited from sending more requests.
-  pub async fn create_webhook(
-    &self,
-    id: impl Into<Snowflake>,
-    webhook: BaseWebhook,
-  ) -> Result<Webhook, Error> {
+  pub async fn create_webhook(&self, id: u64, webhook: BaseWebhook) -> Result<Webhook, Error> {
     let body = serde_json::to_vec(&webhook).map_err(Error::Serialization)?;
 
     self
       .send(
         Method::POST,
-        api!(self.server, "/projects/{}/webhooks", id.into()),
+        api!(self.server, "/projects/{}/webhooks", id),
         body,
       )
       .await
@@ -636,18 +617,14 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn delete_webhook(
-    &self,
-    project_id: impl Into<Snowflake>,
-    webhook_id: u64,
-  ) -> Result<(), Error> {
+  pub async fn delete_webhook(&self, project_id: u64, webhook_id: u64) -> Result<(), Error> {
     self
       .send_inner(
         Method::DELETE,
         api!(
           self.server,
           "/projects/{}/webhooks/{}",
-          project_id.into(),
+          project_id,
           webhook_id
         ),
         vec![],
@@ -664,7 +641,7 @@ where
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn rotate_webhook_secret(
     &self,
-    project_id: impl Into<Snowflake>,
+    project_id: u64,
     webhook_id: u64,
   ) -> Result<String, Error> {
     let response: RotateWebhookSecret = self
@@ -673,7 +650,7 @@ where
         api!(
           self.server,
           "/projects/{}/webhooks/{}/rotate",
-          project_id.into(),
+          project_id,
           webhook_id
         ),
         vec![],
@@ -688,18 +665,14 @@ where
   /// # Errors
   ///
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
-  pub async fn test_webhook(
-    &self,
-    project_id: impl Into<Snowflake>,
-    webhook_id: u64,
-  ) -> Result<(), Error> {
+  pub async fn test_webhook(&self, project_id: u64, webhook_id: u64) -> Result<(), Error> {
     self
       .send_inner(
         Method::POST,
         api!(
           self.server,
           "/projects/{}/webhooks/{}/test",
-          project_id.into(),
+          project_id,
           webhook_id
         ),
         vec![],
@@ -864,7 +837,7 @@ impl Client {
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_vote(
     &self,
-    user_id: impl Into<Snowflake>,
+    user_id: u64,
     source: UserSource,
   ) -> Result<Option<PartialVote>, Error> {
     self.base.get_vote(Snowflake::Me, user_id, source).await
