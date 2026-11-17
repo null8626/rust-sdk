@@ -9,9 +9,9 @@ use super::{
 use super::{ProjectSubmission, User, UserProject};
 #[cfg(feature = "oauth2")]
 use base64::engine::{Engine, general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
 #[cfg(feature = "oauth2")]
 use chrono::Duration;
+use chrono::{DateTime, Utc};
 #[cfg(test)]
 use httpmock::MockServer;
 use reqwest::{Client as HttpClient, IntoUrl, Method, Response};
@@ -164,7 +164,7 @@ impl Oauth2HttpProvider {
         Err(error) => Err(Error::Deserialization(error)),
       },
 
-      Err(error) => Err(Error::Incoming(error)),
+      Err(error) => Err(Error::ReadBody(error)),
     }
   }
 }
@@ -240,7 +240,7 @@ where
     match response.bytes().await {
       Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deserialization),
 
-      Err(error) => Err(Error::Incoming(error)),
+      Err(error) => Err(Error::ReadBody(error)),
     }
   }
 
@@ -496,9 +496,9 @@ where
     id: impl Into<Snowflake>,
     user_id: impl Into<Snowflake>,
     source: UserSource,
-  ) -> Result<PartialVote, Error> {
-    self
-      .send(
+  ) -> Result<Option<PartialVote>, Error> {
+    match self
+      .send::<PartialVote>(
         Method::GET,
         api!(
           self.server,
@@ -510,6 +510,19 @@ where
         vec![],
       )
       .await
+    {
+      Ok(vote) => Ok(Some(vote)),
+
+      Err(Error::Incoming(error)) => {
+        if error.status == 404 && matches!(error.detail.as_deref(), Some("VOTE_EXPIRED")) {
+          Ok(None)
+        } else {
+          Err(Error::Incoming(error))
+        }
+      }
+
+      Err(error) => Err(error),
+    }
   }
 
   /// Fetches the integrations available for a project and whether each one is connected.
@@ -853,7 +866,7 @@ impl Client {
     &self,
     user_id: impl Into<Snowflake>,
     source: UserSource,
-  ) -> Result<PartialVote, Error> {
+  ) -> Result<Option<PartialVote>, Error> {
     self.base.get_vote(Snowflake::Me, user_id, source).await
   }
 }
@@ -983,7 +996,7 @@ impl Oauth2URL {
     match response.bytes().await {
       Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deserialization),
 
-      Err(error) => Err(Error::Incoming(error)),
+      Err(error) => Err(Error::ReadBody(error)),
     }
   }
 }

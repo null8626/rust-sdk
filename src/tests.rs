@@ -7,9 +7,9 @@ use super::{
 };
 #[cfg(feature = "oauth2")]
 use super::{Oauth2, Platform, ProjectSubmission, ProjectType};
-use chrono::Utc;
 #[cfg(feature = "api")]
 use chrono::Duration;
+use chrono::Utc;
 #[cfg(feature = "webhooks")]
 use hmac::{Hmac, KeyInit, Mac};
 #[cfg(feature = "api")]

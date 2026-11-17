@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
 
+use reqwest::Response;
+use serde::Deserialize;
 use std::fmt::{self, Display, Formatter};
 #[cfg(feature = "api")]
 use std::ops::RangeInclusive;
@@ -11,8 +13,11 @@ pub enum Error {
   /// Unable to send a HTTP request to the Top.gg API.
   Outgoing(reqwest::Error),
 
+  /// Unable to read the HTTP response body.
+  ReadBody(reqwest::Error),
+
   /// Received a non-429 unfavorable response from the Top.gg API.
-  Incoming(reqwest::Error),
+  Incoming(RequestError),
 
   /// The client is being ratelimited from sending more HTTP requests to the Top.gg API.
   Ratelimited {
@@ -47,10 +52,9 @@ impl Display for Error {
         "Unable to send a HTTP request to the Top.gg API: {error}"
       ),
 
-      Self::Incoming(error) => write!(
-        f,
-        "Received a non-429 unfavorable response from the Top.gg API: {error}"
-      ),
+      Self::ReadBody(error) => write!(f, "Unable to read the HTTP response body: {error}"),
+
+      Self::Incoming(error) => Display::fmt(error, f),
 
       Self::Ratelimited { retry_after } => write!(
         f,
@@ -81,7 +85,9 @@ impl Display for Error {
 impl std::error::Error for Error {
   fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
     match self {
-      Self::Outgoing(error) | Self::Incoming(error) => Some(error),
+      Self::Outgoing(error) | Self::ReadBody(error) => Some(error),
+
+      Self::Incoming(error) => Some(error),
 
       Self::Serialization(error) | Self::Deserialization(error) => Some(error),
 
@@ -89,3 +95,56 @@ impl std::error::Error for Error {
     }
   }
 }
+
+/// Thrown upon HTTP request failure.
+#[derive(Debug, Deserialize)]
+pub struct RequestError {
+  /// The URI identifying the error type.
+  pub r#type: Option<String>,
+
+  /// The error's short human-readable summary.
+  pub title: Option<String>,
+
+  /// The error's HTTP status code.
+  pub status: u16,
+
+  /// The human-readable explanation of this specific occurrence.
+  pub detail: Option<String>,
+
+  /// The error's code (e.g. `PROJECT_NOT_FOUND`.)
+  #[serde(default, alias = "error")]
+  pub code: Option<String>,
+}
+
+impl RequestError {
+  pub(super) async fn new(response: Response) -> Self {
+    let status = response.status().as_u16();
+
+    if let Ok(bytes) = response.bytes().await
+      && let Ok(data) = serde_json::from_slice(&bytes)
+    {
+      data
+    } else {
+      Self {
+        r#type: None,
+        title: None,
+        status,
+        detail: None,
+        code: None,
+      }
+    }
+  }
+}
+
+impl Display for RequestError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "Got {}: {}",
+      self.status,
+      self.detail.as_deref().unwrap_or("No description")
+    )
+  }
+}
+
+impl std::error::Error for RequestError {}

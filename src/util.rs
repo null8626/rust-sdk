@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
 
 #[cfg(feature = "api")]
-use super::Error;
+use super::{Error, RequestError};
 #[cfg(feature = "oauth2")]
 use rand::Rng;
 #[cfg(feature = "api")]
@@ -58,7 +58,7 @@ pub async fn request(
     .await
     .map_err(Error::Outgoing)?;
 
-  if let Err(error) = response.error_for_status_ref() {
+  if !response.status().is_success() {
     return Err(if response.status() == StatusCode::TOO_MANY_REQUESTS {
       Error::Ratelimited {
         retry_after: if let Some(retry_after2) = response.headers().get("retry-after")
@@ -71,7 +71,7 @@ pub async fn request(
         },
       }
     } else {
-      Error::Incoming(error)
+      Error::Incoming(RequestError::new(response).await)
     });
   }
 
