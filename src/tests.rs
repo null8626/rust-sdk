@@ -584,6 +584,27 @@ async fn test_webhook() {
   endpoint.assert();
 }
 
+#[test]
+#[cfg(feature = "api")]
+fn widgets() {
+  assert_eq!(
+    super::widget::large(Platform::Discord, ProjectType::Bot, 12345, false),
+    "https://top.gg/api/v1/widgets/large/discord/bot/12345"
+  );
+  assert_eq!(
+    super::widget::votes(Platform::Discord, ProjectType::Server, 12345, true),
+    "https://top.gg/api/v1/widgets/small/votes/discord/server/12345?hideAvatar=true"
+  );
+  assert_eq!(
+    super::widget::owner(Platform::Roblox, ProjectType::Game, 12345, false),
+    "https://top.gg/api/v1/widgets/small/owner/roblox/game/12345"
+  );
+  assert_eq!(
+    super::widget::social(Platform::Discord, ProjectType::Bot, 12345, true),
+    "https://top.gg/api/v1/widgets/small/social/discord/bot/12345?hideAvatar=true"
+  );
+}
+
 #[tokio::test]
 #[cfg(feature = "oauth2")]
 async fn oauth2_url() {

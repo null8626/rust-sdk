@@ -18,6 +18,11 @@ mod util;
 #[cfg_attr(doc_cfg, doc(cfg(feature = "webhooks")))]
 pub mod webhooks;
 
+/// Widget URL generators.
+#[cfg(feature = "api")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "api")))]
+pub mod widget;
+
 #[cfg(feature = "api")]
 pub use client::*;
 #[cfg(feature = "api")]
