@@ -7,7 +7,7 @@
 #[cfg(feature = "api")]
 mod client;
 #[cfg(feature = "api")]
-mod error;
+mod errors;
 mod models;
 #[cfg(test)]
 mod tests;
@@ -26,5 +26,5 @@ pub mod widget;
 #[cfg(feature = "api")]
 pub use client::*;
 #[cfg(feature = "api")]
-pub use error::*;
+pub use errors::*;
 pub use models::*;
