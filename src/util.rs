@@ -7,8 +7,6 @@ use super::{Error, RequestError};
 use rand::Rng;
 #[cfg(feature = "api")]
 use reqwest::{Client as HttpClient, IntoUrl, Method, Response, StatusCode, Version, header};
-#[cfg(feature = "oauth2")]
-use serde::Serializer;
 use serde::{Deserialize, Deserializer, de};
 #[cfg(feature = "api")]
 use std::ops::RangeInclusive;
@@ -93,15 +91,6 @@ pub fn secrets64() -> String {
   rand::rng().fill_bytes(&mut bytes);
 
   hex::encode(bytes)
-}
-
-#[cfg(feature = "oauth2")]
-#[allow(clippy::trivially_copy_pass_by_ref)]
-pub fn serialize_snowflake<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
-where
-  S: Serializer,
-{
-  serializer.serialize_str(&value.to_string())
 }
 
 pub fn deserialize_snowflake<'de, D>(deserializer: D) -> Result<u64, D::Error>

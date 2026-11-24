@@ -692,7 +692,7 @@ async fn submit_project() {
   let submission = ProjectSubmission {
     platform: Platform::Discord,
     r#type: ProjectType::Bot,
-    platform_id: 12345,
+    platform_id: String::from("12345"),
     headline: String::from("hello this is a headline"),
     page_content: "hello this is a page content".repeat(20),
   };
@@ -709,7 +709,7 @@ async fn submit_project() {
   let faulty_submission = ProjectSubmission {
     platform: Platform::Discord,
     r#type: ProjectType::Bot,
-    platform_id: 12345,
+    platform_id: String::from("12345"),
     headline: String::from("hello this is a headline"),
     page_content: String::from("hello this is a page content"),
   };

@@ -305,8 +305,7 @@ pub struct PartialProject {
   pub id: u64,
 
   /// The project's platform ID.
-  #[serde(deserialize_with = "util::deserialize_snowflake")]
-  pub platform_id: u64,
+  pub platform_id: String,
 
   /// The project's name in its platform.
   pub name: String,
@@ -496,8 +495,7 @@ pub struct Vote {
   pub user_id: u64,
 
   /// The voter's platform ID.
-  #[serde(deserialize_with = "util::deserialize_snowflake")]
-  pub platform_id: u64,
+  pub platform_id: String,
 }
 
 /// An integration.
@@ -559,8 +557,7 @@ pub struct UserConnection {
   pub platform: Platform,
 
   /// The user's platform ID.
-  #[serde(deserialize_with = "util::deserialize_snowflake")]
-  pub id: u64,
+  pub id: String,
 }
 
 /// A user.
@@ -607,8 +604,7 @@ pub struct ProjectSubmission {
   pub r#type: ProjectType,
 
   /// The project's platform ID.
-  #[serde(serialize_with = "util::serialize_snowflake")]
-  pub platform_id: u64,
+  pub platform_id: String,
 
   /// The project's headline.
   pub headline: String,

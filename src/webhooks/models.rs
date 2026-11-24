@@ -13,11 +13,10 @@ pub struct Project {
   #[serde(deserialize_with = "util::deserialize_snowflake")]
   pub id: u64,
 
-  /// The project's Discord client ID or guild ID.
-  #[serde(deserialize_with = "util::deserialize_snowflake")]
-  pub platform_id: u64,
+  /// The project's platform ID.
+  pub platform_id: String,
 
-  /// The project's platform (always [`Platform::Discord`]).
+  /// The project's platform.
   pub platform: Platform,
 }
 
@@ -28,11 +27,10 @@ pub struct User {
   #[serde(deserialize_with = "util::deserialize_snowflake")]
   pub id: u64,
 
-  /// The user's Discord ID.
-  #[serde(deserialize_with = "util::deserialize_snowflake")]
-  pub platform_id: u64,
+  /// The user's platform ID.
+  pub platform_id: String,
 
-  /// The user's Discord username.
+  /// The user's platform username.
   pub name: String,
 
   /// The user's avatar URL.
