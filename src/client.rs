@@ -1063,7 +1063,6 @@ pub struct Oauth2Session {
   pub token: String,
 
   /// The session's refresh token.
-  #[serde(rename = "refresh_token")]
   pub refresh_token: String,
 
   /// When the session's access token expires.
