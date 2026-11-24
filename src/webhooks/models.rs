@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2023-2026 null8626 & Top.gg
 
-use super::super::{Platform, util};
+use super::super::{Platform, ProjectType, util};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -18,6 +18,9 @@ pub struct Project {
 
   /// The project's platform.
   pub platform: Platform,
+
+  /// The project's type.
+  pub r#type: ProjectType,
 }
 
 /// A user.
