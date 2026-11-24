@@ -1055,7 +1055,7 @@ where
 
 /// An oauth2 session.
 #[cfg(feature = "oauth2")]
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[cfg_attr(doc_cfg, doc(cfg(feature = "oauth2")))]
 pub struct Oauth2Session {
   /// The session's access token.
