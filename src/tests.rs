@@ -415,7 +415,7 @@ async fn get_vote() {
   );
 
   let _ = client
-    .get_vote(661200758510977084, UserSource::Discord)
+    .get_vote(String::from("661200758510977084"), UserSource::Discord)
     .await
     .unwrap();
 

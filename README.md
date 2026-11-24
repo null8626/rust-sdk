@@ -41,7 +41,7 @@ async fn main() {
   }
 
   let vote = client
-    .get_vote(661200758510977084, topgg::UserSource::Discord)
+    .get_vote(String::from("661200758510977084"), topgg::UserSource::Discord)
     .await
     .unwrap();
   println!("{vote:?}");

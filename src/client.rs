@@ -483,7 +483,7 @@ impl ProjectClient {
   /// If the client received an unfavorable response from the API or is ratelimited from sending more requests.
   pub async fn get_vote(
     &self,
-    user_id: u64,
+    user_id: String,
     source: UserSource,
   ) -> Result<Option<PartialVote>, Error> {
     match self
@@ -801,7 +801,7 @@ where
   pub async fn get_vote(
     &self,
     id: u64,
-    user_id: u64,
+    user_id: String,
     source: UserSource,
   ) -> Result<Option<PartialVote>, Error> {
     match self
